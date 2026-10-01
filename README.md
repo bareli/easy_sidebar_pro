@@ -30,6 +30,18 @@ Hebrew and English, right-to-left aware.
   layout is now your own, with Undo.
 - **Start over**: without an admin default, "Remove groups and custom order" in the editor brings back
   Home Assistant's own sidebar (hidden panels stay hidden).
+- **Colours and styles**: open a group's icon in the editor to give it a colour (its name and the line
+  beside its items) and an icon colour. Choose one of Home Assistant's theme colours, which follow your
+  theme in light and dark mode, or any `#rrggbb` colour. If a colour would be hard to read on your theme
+  it is darkened or lightened just enough (WCAG AA). Under **Display** in the editor: group headers plain,
+  with a tinted background or with a line above, and the line beside grouped items shown or hidden.
+- **Collapse settings** (editor, **Display**): groups start collapsed on every page load; only one group
+  open at a time; a collapse / expand all button next to the sidebar title (off by default, because it
+  shortens the title).
+- **Pinned icons at the bottom**: drag items into **Pinned at the bottom** in the editor. They appear as a
+  compact grid of icons above Settings and Notifications (four per row; one column when the sidebar shows
+  icons only). Hover or focus an icon for its name. With the keyboard, use the arrow keys inside the grid
+  and Enter to open; in the editor, Alt + Down on the last row pins it. Up to 20 items.
 - **No flicker**: groups are drawn as part of Home Assistant's own sidebar, not patched in afterwards.
 - **Touch and keyboard**: drag with a finger or a mouse. With the keyboard, focus a handle and press
   Alt + Up / Down; a screen reader hears where the row landed.
@@ -45,12 +57,30 @@ Hebrew and English, right-to-left aware.
 
 No `configuration.yaml` changes are needed.
 
+## Theme variables
+
+Themes can restyle the groups. A colour set on a group in the editor wins over these.
+
+| Variable | What it changes |
+|---|---|
+| `esp-group-header-text-color` | group header name |
+| `esp-group-header-icon-color` | group header icon |
+| `esp-group-header-background` | header background when headers are "tinted" |
+| `esp-group-header-radius` | header corner radius |
+| `esp-group-divider-color` | line beside grouped items, and "line above" headers |
+| `esp-group-divider-width` | width of the line beside grouped items (default 2px) |
+
+Example theme entry: `esp-group-divider-color: "#7e57c2"`.
+
 ## Requirements and compatibility
 
 - Home Assistant 2026.6 or newer (tested on 2026.6.4, 2026.7.4, 2026.8.3 and 2026.9.4). On older
   versions, whose sidebar is built differently, the integration loads but leaves the sidebar untouched.
 - Do not use it together with another sidebar plugin that changes the panel list (for example
-  Sidebar Organizer): both change the same sidebar and the result is unpredictable.
+  Sidebar Organizer): both change the same sidebar and the result is unpredictable. Coming from Sidebar
+  Organizer: groups, default collapsed groups, accordion, the collapse all toggle, divider styling and
+  bottom grid items have equivalents here; sidebar background / scrollbar colours are left to your HA
+  theme, and bottom groups, custom links and templates are not supported.
 - If a future Home Assistant release changes the sidebar internals, Easy Sidebar Pro switches itself
   off and the normal sidebar stays. Your layout is kept.
 

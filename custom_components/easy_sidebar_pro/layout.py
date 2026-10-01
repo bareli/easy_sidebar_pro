@@ -5,11 +5,23 @@ import re
 import unicodedata
 from typing import Any
 
-from .const import GROUP_PREFIX, LAYOUT_VERSION, MAX_ENTRIES, MAX_GROUPS, MAX_NAME
+from .const import (
+    DEFAULT_SETTINGS,
+    DIVIDER_STYLES,
+    GROUP_PREFIX,
+    HEADER_STYLES,
+    LAYOUT_VERSION,
+    MAX_ENTRIES,
+    MAX_GROUPS,
+    MAX_NAME,
+    MAX_PINNED,
+    NAMED_COLORS,
+)
 
 GROUP_ID = re.compile(r"[a-z0-9]{1,16}")
 PANEL = re.compile(r"[A-Za-z0-9_-]{1,100}")
 ICON = re.compile(r"[a-z0-9_-]{1,20}:[a-z0-9_-]{1,64}")
+HEX_COLOR = re.compile(r"#[0-9a-fA-F]{6}|#[0-9a-fA-F]{3}")
 # `prefix:name` icon sets stay open (mdi, hass, custom sets), but URI schemes are never icon sets.
 ICON_BLOCKED_PREFIXES = frozenset(
     {"javascript", "data", "vbscript", "http", "https", "file", "blob", "about", "ftp", "ws", "wss", "mailto", "tel"}
@@ -46,6 +58,44 @@ def _icon(value: Any, where: str) -> str | None:
     return value
 
 
+def _color(value: Any, where: str) -> str | None:
+    """None, a named theme colour, or `#rrggbb` (`#rgb` is expanded; output is lowercase)."""
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise LayoutError(f"{where}: invalid colour")
+    if value in NAMED_COLORS:
+        return value
+    if not HEX_COLOR.fullmatch(value):
+        raise LayoutError(f"{where}: invalid colour")
+    value = value.lower()
+    if len(value) == 4:
+        value = "#" + "".join(c * 2 for c in value[1:])
+    return value
+
+
+def validate_settings(data: Any) -> dict[str, Any]:
+    """Display and collapse settings; missing keys take their defaults, unknown keys are refused."""
+    if data is None:
+        return dict(DEFAULT_SETTINGS)
+    if not isinstance(data, dict) or len(data) > len(DEFAULT_SETTINGS):
+        raise LayoutError("settings must be an object with known keys")
+    out = dict(DEFAULT_SETTINGS)
+    for key, value in data.items():
+        if key not in DEFAULT_SETTINGS:
+            raise LayoutError(f"settings: unknown key {key!r}")
+        if key == "header":
+            if value not in HEADER_STYLES:
+                raise LayoutError("settings.header: invalid value")
+        elif key == "divider":
+            if value not in DIVIDER_STYLES:
+                raise LayoutError("settings.divider: invalid value")
+        elif not isinstance(value, bool):
+            raise LayoutError(f"settings.{key}: must be true or false")
+        out[key] = value
+    return out
+
+
 def _panel(value: Any, where: str) -> str:
     if not isinstance(value, str) or not PANEL.fullmatch(value):
         raise LayoutError(f"{where}: invalid panel {value!r}")
@@ -69,6 +119,12 @@ def validate_layout(data: Any) -> dict[str, Any]:
         raise LayoutError(f"at most {MAX_GROUPS} groups")
     if len(order) > MAX_ENTRIES:
         raise LayoutError(f"at most {MAX_ENTRIES} entries")
+    grid = data.get("grid", [])
+    if not isinstance(grid, list):
+        raise LayoutError("grid must be a list")
+    if len(grid) > MAX_PINNED:
+        raise LayoutError(f"at most {MAX_PINNED} pinned panels")
+    settings = validate_settings(data.get("settings"))
 
     seen_panels: set[str] = set()
     seen_groups: set[str] = set()
@@ -114,11 +170,26 @@ def validate_layout(data: Any) -> dict[str, Any]:
             seen_panels.add(panel)
             clean_panels.append(panel)
             total += 1
-        clean_groups[gid] = {"name": _name(group.get("name"), where), "icon": icon, "panels": clean_panels}
+        clean_groups[gid] = {
+            "name": _name(group.get("name"), where),
+            "icon": icon,
+            "color": _color(group.get("color"), f"{where}.color"),
+            "icon_color": _color(group.get("icon_color"), f"{where}.icon_color"),
+            "panels": clean_panels,
+        }
+
+    clean_grid: list[str] = []
+    for i, value in enumerate(grid):
+        panel = _panel(value, f"grid[{i}]")
+        if panel in seen_panels:
+            raise LayoutError(f"grid[{i}]: panel {panel!r} listed twice")
+        seen_panels.add(panel)
+        clean_grid.append(panel)
+        total += 1
 
     if total > MAX_ENTRIES:
         raise LayoutError(f"at most {MAX_ENTRIES} entries")
-    return {"version": LAYOUT_VERSION, "order": clean_order, "groups": clean_groups}
+    return {"version": LAYOUT_VERSION, "order": clean_order, "groups": clean_groups, "grid": clean_grid, "settings": settings}
 
 
 def validate_collapsed(data: Any) -> list[str]:
