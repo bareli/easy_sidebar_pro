@@ -31,13 +31,16 @@ def _store(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg:
 @websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/subscribe"})
 @callback
 def ws_subscribe(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
-    if (store := _store(hass, connection, msg)) is None:
+    if _store(hass, connection, msg) is None:
         return
     user = connection.user
     msg_id = msg["id"]
 
     @callback
     def send(user_id: str | None = None) -> None:
+        # Resolve the store per event: a config-entry reload replaces it while subscriptions stay open.
+        if (store := hass.data.get(DATA_STORE)) is None:
+            return
         if user_id is None or user_id == user.id:
             connection.send_message(websocket_api.event_message(msg_id, store.view(user.id, user.is_admin)))
 
