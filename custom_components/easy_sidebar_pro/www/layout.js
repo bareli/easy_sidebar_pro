@@ -228,7 +228,41 @@ export function newGroupId(tree) {
   }
 }
 
+// Same rules as layout.py: control (Cc) and format (Cf) characters are not allowed, except the
+// joiners real text needs (ZWNJ, ZWJ); a name needs at least one visible character.
+const ALLOWED_FORMAT = new Set([String.fromCharCode(0x200c), String.fromCharCode(0x200d)]);
+
+/** A clean group name, or "" when nothing visible is left. */
 export function cleanName(value) {
-  // eslint-disable-next-line no-control-regex
-  return String(value ?? "").replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, MAX_NAME);
+  const name = String(value ?? "")
+    .replace(/[\p{Cc}\p{Cf}]/gu, (c) => (ALLOWED_FORMAT.has(c) ? c : ""))
+    .trim()
+    .slice(0, MAX_NAME)
+    .trim();
+  return /[^\p{C}\p{Z}]/u.test(name) ? name : "";
+}
+
+const ICON_RE = /^[a-z0-9_-]{1,20}:[a-z0-9_-]{1,64}$/;
+// Same list as layout.py: icon sets stay open (mdi, hass, custom), URI schemes never are icon sets.
+const ICON_BLOCKED_PREFIXES = new Set(["javascript", "data", "vbscript", "http", "https", "file", "blob", "about", "ftp", "ws", "wss", "mailto", "tel"]);
+
+/** `prefix:name` icon, whole-string match (no trailing newline), never a URI scheme. */
+export function validIcon(value) {
+  return typeof value === "string" && ICON_RE.test(value) && !ICON_BLOCKED_PREFIXES.has(value.slice(0, value.indexOf(":")));
+}
+
+/**
+ * HA's native `sidebar` user data after an editor save. `known`: panels the editor showed;
+ * `invisible`: panels hidden only because HA hides them by default. Entries for panels HA does not
+ * list right now (a stopped add-on) are kept: hidden stays hidden, order entries go to the end.
+ */
+export function nativeSidebar(current, tree, known, hidden, invisible) {
+  const panelOrder = flatten(tree).filter((p) => known.has(p) && !(invisible.has(p) && hidden.has(p)));
+  const hiddenPanels = [...hidden].filter((p) => known.has(p) && !invisible.has(p));
+  const keep = (list, out) => (Array.isArray(list) ? list : []).filter((p) => typeof p === "string" && !known.has(p) && !out.includes(p));
+  return {
+    ...current,
+    panelOrder: [...panelOrder, ...keep(current?.panelOrder, panelOrder)],
+    hiddenPanels: [...hiddenPanels, ...keep(current?.hiddenPanels, hiddenPanels)],
+  };
 }

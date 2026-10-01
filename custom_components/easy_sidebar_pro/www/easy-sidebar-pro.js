@@ -27,7 +27,6 @@ const PANEL_ICONS = {
 const FIXED_PANELS = ["profile", "config", "notfound"];
 const DEFAULT_ICON = "mdi:folder-outline";
 const HOLD_MS = 1500;
-const ICON_RE = /^[a-z0-9_-]{1,20}:[a-z0-9_-]{1,64}$/;
 const SUGGESTED_ICONS = [
   "mdi:home", "mdi:sofa", "mdi:bed", "mdi:silverware-fork-knife", "mdi:lightbulb-group", "mdi:thermometer",
   "mdi:shield-home", "mdi:camera", "mdi:chart-line", "mdi:calendar-month", "mdi:tools", "mdi:cog",
@@ -160,7 +159,8 @@ const GROUP_CSS = `
   font-size: var(--ha-font-size-m, 14px); font-weight: var(--ha-font-weight-medium, 500);
 }
 .row:hover { background: var(--sidebar-hover-background-color, rgba(var(--rgb-primary-text-color, 0,0,0), 0.06)); }
-:host(:focus-visible) .row { outline: 2px solid var(--primary-color); outline-offset: -2px; }
+.row:focus { outline: none; }
+.row:focus-visible { outline: 2px solid var(--primary-color); outline-offset: -2px; }
 .icon { --mdc-icon-size: 24px; color: var(--sidebar-icon-color, var(--secondary-text-color)); flex: none; width: 24px; height: 24px; }
 .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .count { color: var(--secondary-text-color); font-size: var(--ha-font-size-s, 12px); font-weight: normal; font-variant-numeric: tabular-nums; }
@@ -180,18 +180,21 @@ class EspGroup extends HTMLElement {
     super();
     this.interactive = true;
     this.disabled = false;
-    const root = this.attachShadow({ mode: "open" });
+    // The host is the list item HA's roving tabindex moves between (like HA's own rows); focus is
+    // delegated to the inner button, which carries the role, the name and the expanded state.
+    const root = this.attachShadow({ mode: "open", delegatesFocus: true });
     const style = h("style");
     style.textContent = GROUP_CSS;
     this._icon = iconEl(DEFAULT_ICON);
     this._name = h("span", { class: "name" });
     this._count = h("span", { class: "count" });
-    root.append(style, h("div", { class: "row", part: "row" }, this._icon, this._name, this._count, svg(ICONS.chevron, "chev")));
+    this._row = h("div", { class: "row", part: "row", role: "button", tabindex: "-1" }, this._icon, this._name, this._count, svg(ICONS.chevron, "chev"));
+    root.append(style, this._row);
     this.addEventListener("click", () => this.onToggle?.());
   }
 
   connectedCallback() {
-    this.setAttribute("role", "button");
+    this.setAttribute("role", "listitem");
     this.setAttribute("ha-list-item", "");
     this._list = this.closest("ha-list-nav");
     this._list?.dispatchEvent(new CustomEvent("ha-list-item-register", { detail: { item: this } }));
@@ -215,31 +218,42 @@ class EspGroup extends HTMLElement {
     this.toggleAttribute("selected", row.collapsed && row.selected);
     this.toggleAttribute("icon-only", iconOnly);
     this.toggleAttribute("rtl", rtl);
-    this.setAttribute("aria-expanded", String(!row.collapsed));
-    this.setAttribute("aria-label", `${row.name}, ${count}`);
+    this._row.setAttribute("aria-expanded", String(!row.collapsed));
+    this._row.setAttribute("aria-label", `${row.name}, ${count}`);
     this.title = iconOnly ? row.name : "";
   }
 }
 
 /* ------------------------------------------------------------------ editor */
 
+// Contrast (WCAG AA 4.5:1) with the user's theme hue: action text is the theme colour mixed toward
+// the text colour (darker on light themes, lighter on dark ones); the filled button is the theme
+// colour mixed with black under white text. The plain declarations are the fallback without color-mix.
 const EDITOR_CSS = `
 :host { display: block; color: var(--sidebar-text-color, var(--primary-text-color)); font-size: var(--ha-font-size-m, 14px);
-  user-select: text; -webkit-user-select: text; }
+  user-select: text; -webkit-user-select: text;
+  --esp-action-color: var(--primary-color);
+  --esp-action-color: color-mix(in srgb, var(--primary-color) 60%, var(--primary-text-color, #212121));
+  --esp-fill-color: var(--primary-color);
+  --esp-fill-color: color-mix(in srgb, var(--primary-color) 65%, black);
+  --esp-error-color: var(--error-color, #db4437);
+  --esp-error-color: color-mix(in srgb, var(--error-color, #db4437) 75%, var(--primary-text-color, #212121)); }
 .handle, .row .title, .bar-title, .note { user-select: none; -webkit-user-select: none; }
 .bar { position: sticky; top: 0; z-index: 2; background: var(--sidebar-background-color, var(--card-background-color));
   display: flex; flex-direction: column; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--divider-color); }
 .bar-title { font-weight: var(--ha-font-weight-medium, 500); }
 .bar-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
 .note { color: var(--secondary-text-color); font-size: var(--ha-font-size-s, 12px); line-height: 1.4; }
-.error { color: var(--error-color, #db4437); font-size: var(--ha-font-size-s, 12px); }
+.error { color: var(--esp-error-color); font-size: var(--ha-font-size-s, 12px); }
+.field-error { padding: 0 12px 6px; }
+.field-error:empty { padding: 0; }
 button { font: inherit; color: inherit; }
 .btn { border: 1px solid var(--divider-color); background: none; border-radius: 18px; min-height: 36px; padding: 0 14px; cursor: pointer; }
-.btn.primary { background: var(--primary-color); border-color: var(--primary-color); color: var(--text-primary-color, #fff); }
+.btn.primary { background: var(--esp-fill-color); border-color: var(--esp-fill-color); color: #fff; }
 .btn:focus-visible, .icon-btn:focus-visible, .handle:focus-visible, input:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 1px; }
-.list { padding: 6px 0; }
-.add { display: flex; align-items: center; gap: 8px; margin: 2px 8px 6px; padding: 0 8px; min-height: 40px; width: calc(100% - 16px);
-  border: 1px dashed var(--divider-color); border-radius: 8px; background: none; cursor: pointer; color: var(--primary-color); }
+.list { padding: 0 0 6px; }
+.add { display: flex; align-items: center; gap: 8px; margin: 8px 8px 6px; padding: 0 8px; min-height: 40px; width: calc(100% - 16px);
+  border: 1px dashed var(--divider-color); border-radius: 8px; background: none; cursor: pointer; color: var(--esp-action-color); }
 .add svg { width: 20px; height: 20px; fill: currentColor; }
 .group { margin: 4px 6px; border-radius: 10px; border: 1px solid var(--divider-color); }
 .row { display: flex; align-items: center; gap: 6px; min-height: 40px; padding-inline: 2px 4px; box-sizing: border-box; border-radius: 8px; position: relative; }
@@ -253,20 +267,21 @@ button { font: inherit; color: inherit; }
 .handle svg { width: 20px; height: 20px; fill: currentColor; }
 .icon { --mdc-icon-size: 22px; width: 22px; height: 22px; flex: none; color: var(--sidebar-icon-color, var(--secondary-text-color)); }
 .title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.row.hidden .title, .row.hidden .icon { opacity: 0.45; }
+.row.hidden .title { color: var(--secondary-text-color); }
+.row.hidden .icon { opacity: 0.45; }
 .icon-btn { flex: none; width: 36px; height: 36px; display: grid; place-items: center; border: none; background: none; border-radius: 50%; cursor: pointer; color: var(--secondary-text-color); }
 .icon-btn svg { width: 20px; height: 20px; fill: currentColor; }
 .icon-btn[disabled] { opacity: 0.3; cursor: default; }
 .icon-btn:not([disabled]):hover { background: rgba(127,127,127,0.15); }
 .name-input { flex: 1; min-width: 0; font: inherit; font-weight: var(--ha-font-weight-medium, 500); color: inherit; background: transparent;
-  border: 1px solid transparent; border-radius: 6px; padding: 6px; }
-.name-input:hover { border-color: var(--divider-color); }
-.name-input[aria-invalid="true"] { border-color: var(--error-color, #db4437); }
+  border: 1px solid transparent; border-bottom-color: var(--secondary-text-color); border-radius: 6px 6px 0 0; padding: 6px; }
+.name-input:hover { border-color: var(--divider-color); border-bottom-color: var(--primary-text-color); }
+.name-input[aria-invalid="true"] { border-color: var(--esp-error-color); }
 .icon-edit { display: flex; flex-direction: column; gap: 6px; padding: 6px 10px 10px; border-bottom: 1px solid var(--divider-color); }
 .icon-line { display: flex; gap: 8px; align-items: center; }
 .chips { display: grid; grid-template-columns: repeat(auto-fill, minmax(36px, 1fr)); gap: 2px; }
 .chip[aria-pressed="true"] { background: rgba(var(--rgb-primary-color, 3,169,244), 0.18); color: var(--primary-color); }
-.icon-edit input[aria-invalid="true"] { border-color: var(--error-color, #db4437); }
+.icon-edit input[aria-invalid="true"] { border-color: var(--esp-error-color); }
 .icon-edit input { flex: 1; min-width: 0; font: inherit; color: inherit; background: transparent; border: 1px solid var(--divider-color); border-radius: 6px; padding: 6px; }
 .dragging { opacity: 0.35; }
 .drop-before::before, .drop-after::after { content: ""; position: absolute; inset-inline: 4px; height: 3px; border-radius: 2px; background: var(--primary-color); }
@@ -276,7 +291,7 @@ button { font: inherit; color: inherit; }
 .ghost { position: fixed; translate: 12px 0; z-index: 1000; pointer-events: none; opacity: 0.92; background: var(--card-background-color, #fff);
   box-shadow: 0 6px 18px rgba(0,0,0,0.25); border-radius: 8px; }
 .footer { display: flex; flex-direction: column; gap: 4px; padding: 8px 12px 16px; border-top: 1px solid var(--divider-color); margin-top: 6px; }
-.link { border: none; background: none; text-align: start; padding: 8px 0; color: var(--primary-color); cursor: pointer; min-height: 36px; }
+.link { border: none; background: none; text-align: start; padding: 8px 0; color: var(--esp-action-color); cursor: pointer; min-height: 36px; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 `;
 
@@ -307,6 +322,8 @@ class EspEditor extends HTMLElement {
     this.error = "";
     this.focusKey = null;
     this.iconEditing = null;
+    // Group id -> what the user left in a name field that is not a valid name (shown with its error).
+    this.nameErrors = new Map();
     this.render();
     requestAnimationFrame(() => this.shadowRoot.querySelector(".bar .btn")?.focus());
   }
@@ -328,11 +345,88 @@ class EspEditor extends HTMLElement {
     return at.node.type === "group" ? at.node.name : this.info.get(at.node.path)?.title ?? at.node.path;
   }
 
+  _q(selector) {
+    return this.shadowRoot.querySelector(selector);
+  }
+
+  /**
+   * A group's name or icon changed: update its controls in place. No re-render, so focus stays put
+   * and a click that blurred the name field still lands on its button.
+   */
+  patchGroup(id) {
+    const node = this.tree.find((n) => n.type === "group" && n.id === id);
+    if (!node) return;
+    const lang = this.lang;
+    const label = (sel, text, title = false) => {
+      const el = this._q(sel);
+      if (!el) return null;
+      el.setAttribute("aria-label", text);
+      if (title) el.title = text;
+      return el;
+    };
+    label(`[data-focus-key="handle:${L.groupKey(id)}"]`, t(lang, "drag", { name: node.name }), true);
+    const iconBtn = label(`[data-focus-key="icon:${id}"]`, t(lang, "groupIcon", { name: node.name }));
+    const headIcon = iconBtn?.querySelector(".icon");
+    if (headIcon) headIcon.icon = node.icon || DEFAULT_ICON;
+    label(`[data-focus-key="ungroup:${id}"]`, t(lang, "ungroup", { name: node.name }), true);
+    label(`[data-children="${id}"]`, node.name);
+    const pending = this.nameErrors.get(id);
+    const input = this._q(`[data-focus-key="name:${id}"]`);
+    if (input) {
+      if (pending === undefined) {
+        input.removeAttribute("aria-invalid");
+        if (input.value !== node.name) input.value = node.name;
+      } else input.setAttribute("aria-invalid", "true");
+    }
+    const nameError = this._q(`#name-err-${id}`);
+    if (nameError) nameError.textContent = pending === undefined ? "" : t(lang, "nameRequired");
+    const preview = this._q(`[data-preview="${id}"]`);
+    if (preview) preview.icon = node.icon || DEFAULT_ICON;
+    const picker = this._q(`[data-focus-key="picker:${id}"]`);
+    if (picker) {
+      picker.removeAttribute("aria-invalid");
+      if (picker.value.trim() !== (node.icon || "")) picker.value = node.icon || "";
+      const iconError = this._q(`#icon-err-${id}`);
+      if (iconError) iconError.textContent = "";
+    }
+    for (const chip of this.shadowRoot.querySelectorAll(`[data-focus-key^="chip:${id}:"]`))
+      chip.setAttribute("aria-pressed", String(chip.getAttribute("aria-label") === node.icon));
+  }
+
+  /** A panel's hidden state changed: update its row in place. */
+  patchRow(path) {
+    const row = this._q(`.row[data-key="${CSS.escape(L.panelKey(path))}"]`);
+    const eye = row?.querySelector(".eye");
+    if (!eye) return;
+    const hidden = this.hiddenSet.has(path);
+    const text = t(this.lang, hidden ? "show" : "hide", { name: this.info.get(path)?.title ?? path });
+    row.classList.toggle("hidden", hidden);
+    eye.setAttribute("aria-pressed", String(hidden));
+    eye.setAttribute("aria-label", text);
+    eye.title = text;
+    eye.replaceChildren(svg(hidden ? ICONS.eyeOff : ICONS.eye));
+  }
+
+  /** A name field holds an invalid name: focus it and say so. Returns whether one did. */
+  focusInvalidName() {
+    const id = this.nameErrors.keys().next().value;
+    if (id === undefined) return false;
+    const input = this._q(`[data-focus-key="name:${id}"]`);
+    input?.focus();
+    const nameError = this._q(`#name-err-${id}`);
+    if (nameError) {
+      nameError.textContent = "";
+      setTimeout(() => (nameError.textContent = t(this.lang, "nameRequired")), 50);
+    }
+    return true;
+  }
+
   render() {
     const lang = this.lang;
     const root = this.shadowRoot;
     const active = root.activeElement;
     const focusKey = this.focusKey ?? active?.dataset?.focusKey ?? null;
+    for (const id of [...this.nameErrors.keys()]) if (!this.tree.some((n) => n.type === "group" && n.id === id)) this.nameErrors.delete(id);
 
     const bar = h(
       "div",
@@ -349,15 +443,13 @@ class EspEditor extends HTMLElement {
       this.error ? h("div", { class: "error", role: "alert" }, this.error) : null,
     );
 
-    const list = h("div", { class: "list", role: "list", "aria-labelledby": "esp-title" });
-    list.append(
-      h(
-        "button",
-        { class: "add", type: "button", "data-focus-key": "add", onclick: () => this.actions.addGroup() },
-        svg(ICONS.plus),
-        t(lang, "addGroup"),
-      ),
+    const add = h(
+      "button",
+      { class: "add", type: "button", "data-focus-key": "add", onclick: () => this.actions.addGroup() },
+      svg(ICONS.plus),
+      t(lang, "addGroup"),
     );
+    const list = h("div", { class: "list", role: "list", "aria-labelledby": "esp-title" });
     for (const node of this.tree) {
       if (node.type === "group") list.append(this.groupBlock(node));
       else if (!node.missing) list.append(h("div", { class: "top", role: "listitem" }, this.panelRow(node, null)));
@@ -372,7 +464,7 @@ class EspEditor extends HTMLElement {
         footer.append(h("button", { class: "link", type: "button", "data-focus-key": "cleardef", onclick: () => this.actions.clearDefault() }, t(lang, "clearDefault")));
     }
 
-    this._content.replaceChildren(bar, list, footer.childElementCount ? footer : "");
+    this._content.replaceChildren(bar, add, list, footer.childElementCount ? footer : "");
 
     if (focusKey) {
       const el = root.querySelector(`[data-focus-key="${CSS.escape(focusKey)}"]`);
@@ -384,16 +476,22 @@ class EspEditor extends HTMLElement {
   groupBlock(node) {
     const lang = this.lang;
     const key = L.groupKey(node.id);
+    const pending = this.nameErrors.get(node.id);
+    // Enter commits in place and keeps focus here; blur commits through `change`. Neither re-renders.
     const input = h("input", {
       class: "name-input",
       type: "text",
       maxlength: String(L.MAX_NAME),
       "aria-label": t(lang, "groupName"),
+      "aria-describedby": `name-err-${node.id}`,
+      "aria-invalid": pending === undefined ? null : "true",
       "data-focus-key": `name:${node.id}`,
-      ".value": node.name,
+      ".value": pending ?? node.name,
       onchange: (e) => this.actions.rename(node.id, e.target),
       onkeydown: (e) => {
-        if (e.key === "Enter") e.target.blur();
+        if (e.key !== "Enter") return;
+        e.preventDefault();
+        this.actions.rename(node.id, e.target);
       },
     });
     const head = h(
@@ -426,12 +524,17 @@ class EspEditor extends HTMLElement {
         svg(ICONS.ungroup),
       ),
     );
-    const block = h("div", { class: "group", role: "listitem", "data-block": key }, head);
+    const nameError = h(
+      "div",
+      { class: "error field-error", id: `name-err-${node.id}`, role: "alert" },
+      pending === undefined ? null : t(lang, "nameRequired"),
+    );
+    const block = h("div", { class: "group", role: "listitem", "data-block": key }, head, nameError);
     if (this.iconEditing === node.id) block.append(this.iconEditor(node));
     const kids = h("div", { class: "children", role: "list", "aria-label": node.name, "data-children": node.id });
     const shown = node.children.filter((c) => !c.missing);
     for (const c of shown) kids.append(h("div", { role: "listitem" }, this.panelRow(c, node.id)));
-    if (!shown.length) kids.append(h("div", { class: "empty" }, t(lang, "empty")));
+    if (!shown.length) kids.append(h("div", { class: "empty", role: "listitem", "data-empty": node.id }, t(lang, "empty")));
     block.append(kids);
     return block;
   }
@@ -439,10 +542,11 @@ class EspEditor extends HTMLElement {
   iconEditor(node) {
     const lang = this.lang;
     const preview = iconEl(node.icon || DEFAULT_ICON);
+    preview.setAttribute("data-preview", node.id);
     const error = h("div", { class: "error", id: `icon-err-${node.id}`, role: "alert" });
     const apply = (value) => {
       const icon = value.trim() || null;
-      if (icon !== null && !ICON_RE.test(icon)) {
+      if (icon !== null && !L.validIcon(icon)) {
         input.setAttribute("aria-invalid", "true");
         error.textContent = t(lang, "iconInvalid");
         return;
@@ -462,7 +566,7 @@ class EspEditor extends HTMLElement {
       oninput: (e) => {
         e.target.removeAttribute("aria-invalid");
         error.textContent = "";
-        if (ICON_RE.test(e.target.value.trim())) preview.icon = e.target.value.trim();
+        if (L.validIcon(e.target.value.trim())) preview.icon = e.target.value.trim();
       },
       onchange: (e) => apply(e.target.value),
       onkeydown: (e) => {
@@ -482,7 +586,7 @@ class EspEditor extends HTMLElement {
             title: icon,
             "aria-pressed": String(node.icon === icon),
             "data-focus-key": `chip:${node.id}:${icon}`,
-            onclick: () => this.actions.setIcon(node.id, icon, `chip:${node.id}:${icon}`),
+            onclick: () => this.actions.setIcon(node.id, icon),
           },
           iconEl(icon),
         ),
@@ -506,7 +610,7 @@ class EspEditor extends HTMLElement {
       h(
         "button",
         {
-          class: "icon-btn",
+          class: "icon-btn eye",
           type: "button",
           "aria-pressed": String(hidden),
           "aria-label": t(lang, hidden ? "show" : "hide", { name: info.title }),
@@ -582,7 +686,28 @@ class EspEditor extends HTMLElement {
   _updateTarget(x, y) {
     const d = this._drag;
     this._clearMarks();
+    // What is marked is what a release does: every path that marks nothing leaves no target.
+    d.target = null;
+    const box = this.getBoundingClientRect();
+    if (x < box.left || x > box.right) return;
     const hit = this.shadowRoot.elementFromPoint(x, y);
+    const empty = hit?.closest?.("[data-empty]");
+    if (empty) {
+      // An empty group's "Drop items here": a panel goes into it; a group lands before or after it.
+      const block = empty.closest(".group");
+      if (!block || d.block.contains(empty)) return;
+      const targetKey = L.groupKey(empty.dataset.empty);
+      if (d.key.startsWith("g:")) {
+        const r = block.getBoundingClientRect();
+        const zone = y < r.top + r.height / 2 ? "before" : "after";
+        block.classList.add(zone === "before" ? "drop-before" : "drop-after");
+        d.target = { key: targetKey, zone };
+      } else {
+        empty.classList.add("drop-into");
+        d.target = { key: targetKey, zone: "into" };
+      }
+      return;
+    }
     let row = hit?.closest?.(".row[data-key]");
     if (!row) {
       const rows = [...this.shadowRoot.querySelectorAll(".row[data-key]")].filter((r) => !d.block.contains(r));
@@ -593,10 +718,7 @@ class EspEditor extends HTMLElement {
       else if (y > last.bottom) row = rows[rows.length - 1];
       else return;
     }
-    if (d.block.contains(row)) {
-      d.target = null;
-      return;
-    }
+    if (d.block.contains(row)) return;
     const targetKey = row.dataset.key;
     const r = row.getBoundingClientRect();
     const rel = (y - r.top) / r.height;
@@ -681,6 +803,7 @@ const SIDEBAR_CSS = `
 :host(:not([expanded])) .esp-edit { display: none; }
 `;
 let sidebarSheet = null;
+let navSheet = null;
 
 class Controller {
   constructor(sb) {
@@ -755,8 +878,11 @@ class Controller {
     const rows = L.arrange(this.data.layout, [...byPath.keys()], this.data.collapsed, selected);
     this.rowGroups = new Map(rows.filter((r) => r.type === "panel").map((r) => [r.path, r.group]));
     this.lastInGroup = new Set(rows.filter((r) => r.type === "panel" && r.last).map((r) => r.path));
-    const iconOnly = !this.sb.hasAttribute("expanded") && !this.sb.alwaysExpand;
-    const rtl = getComputedStyle(this.sb).direction === "rtl";
+    // HA reflects `expanded` from `alwaysExpand` in updated(), i.e. after this render: read the property.
+    const iconOnly = typeof this.sb.alwaysExpand === "boolean" ? !this.sb.alwaysExpand : !this.sb.hasAttribute("expanded");
+    // HA sets the page direction on <html dir>; reading it avoids a style recalculation per render.
+    const dir = document.documentElement.dir;
+    const rtl = dir ? dir === "rtl" : getComputedStyle(this.sb).direction === "rtl";
     const used = new Set();
     const out = rows.map((r) => {
       if (r.type === "panel") return this.sb._renderPanel(byPath.get(r.path), r.path === selected);
@@ -783,11 +909,32 @@ class Controller {
     }
     if (!root.adoptedStyleSheets.includes(sidebarSheet)) root.adoptedStyleSheets = [...root.adoptedStyleSheets, sidebarSheet];
     for (const item of root.querySelectorAll('ha-list-nav.before-spacer ha-list-item-button[id^="sidebar-panel-"]')) {
-      const group = this.editing ? null : this.rowGroups.get(item.id.slice("sidebar-panel-".length));
       const path = item.id.slice("sidebar-panel-".length);
-      if (group) item.setAttribute("data-esp-group", group);
-      else item.removeAttribute("data-esp-group");
-      item.toggleAttribute("data-esp-last", !!group && this.lastInGroup.has(path));
+      const group = this.editing ? null : this.rowGroups.get(path);
+      // Write only on change: an attribute write per row per update costs a style pass each time.
+      if (group) {
+        if (item.getAttribute("data-esp-group") !== group) item.setAttribute("data-esp-group", group);
+      } else if (item.hasAttribute("data-esp-group")) item.removeAttribute("data-esp-group");
+      const last = !!group && this.lastInGroup.has(path);
+      if (item.hasAttribute("data-esp-last") !== last) item.toggleAttribute("data-esp-last", last);
+    }
+    for (const nav of root.querySelectorAll("ha-list-nav")) {
+      // HA's list items unregister from disconnectedCallback, when the event can no longer reach the
+      // list, so every row our renders replace stays in the list's `items` (a leak, and stale entries
+      // for arrow-key navigation). Unregister the detached ones through the list's own event.
+      if (Array.isArray(nav.items))
+        for (const item of nav.items.filter((i) => !i.isConnected))
+          nav.dispatchEvent(new CustomEvent("ha-list-item-unregister", { detail: { item } }));
+      // The editor's Done/Cancel bar is sticky; HA's inner list box would be its scroll container but
+      // never scrolls. While editing, let the list element itself be the scroll container.
+      if (nav.shadowRoot && nav.classList.contains("before-spacer")) {
+        if (!navSheet) {
+          navSheet = new CSSStyleSheet();
+          navSheet.replaceSync(":host([data-esp-editing]) .base { overflow: visible; }");
+        }
+        if (!nav.shadowRoot.adoptedStyleSheets.includes(navSheet)) nav.shadowRoot.adoptedStyleSheets = [...nav.shadowRoot.adoptedStyleSheets, navSheet];
+        if (nav.hasAttribute("data-esp-editing") !== this.editing) nav.toggleAttribute("data-esp-editing", this.editing);
+      }
     }
     const menu = root.querySelector(".menu");
     if (menu && this.data) {
@@ -796,6 +943,12 @@ class Controller {
         btn = h("button", { class: "esp-edit", type: "button" }, svg(ICONS.pencil));
         for (const type of ["pointerdown", "mousedown", "touchstart", "pointerup", "mouseup", "touchend"])
           btn.addEventListener(type, (e) => e.stopPropagation());
+        // HA's header handles Enter / Space itself and cancels them, so the button never got its click.
+        // Only these two keys: HA's global shortcuts must still see every other key.
+        for (const type of ["keydown", "keyup"])
+          btn.addEventListener(type, (e) => {
+            if (e.key === "Enter" || e.key === " ") e.stopPropagation();
+          });
         btn.addEventListener("click", (e) => {
           e.stopPropagation();
           this.startEdit();
@@ -832,10 +985,8 @@ class Controller {
     const visibleOrder = [...this.sb.shadowRoot.querySelectorAll('ha-list-nav.before-spacer ha-list-item-button[id^="sidebar-panel-"]')].map((el) =>
       el.id.slice("sidebar-panel-".length),
     );
-    const rank = (p) => {
-      const i = visibleOrder.indexOf(p.url_path);
-      return i < 0 ? 1e6 : i;
-    };
+    const position = new Map(visibleOrder.map((path, i) => [path, i]));
+    const rank = (p) => position.get(p.url_path) ?? 1e6;
     all.sort((a, b) => rank(a) - rank(b) || panelTitle(hass, a).localeCompare(panelTitle(hass, b), hass.language));
     const hidden = new Set();
     const defaultInvisible = new Set();
@@ -896,7 +1047,9 @@ class Controller {
       return t(lang(), "movedTop", { name, pos: visible.indexOf(at.node) + 1 });
     };
     return {
-      done: () => this.save(ed().tree, ed().hiddenSet),
+      done: () => {
+        if (!ed().focusInvalidName()) this.save(ed().tree, ed().hiddenSet);
+      },
       cancel: () => this.stopEdit(),
       addGroup: () => {
         const id = L.newGroupId(ed().tree);
@@ -904,17 +1057,18 @@ class Controller {
         ed().shadowRoot.querySelector(`[data-focus-key="name:${id}"]`)?.select();
       },
       rename: (id, input) => {
+        const e = ed();
         const name = L.cleanName(input.value);
-        if (!name) {
-          input.setAttribute("aria-invalid", "true");
-          ed().set({ error: t(lang(), "nameRequired") }, `name:${id}`);
-          return;
-        }
-        ed().set({ tree: L.updateGroup(ed().tree, id, { name }), error: "" });
+        if (name) {
+          e.nameErrors.delete(id);
+          e.tree = L.updateGroup(e.tree, id, { name });
+        } else e.nameErrors.set(id, input.value);
+        e.patchGroup(id);
       },
-      setIcon: (id, icon, focusKey) => {
-        if (icon !== null && !ICON_RE.test(icon)) return;
-        ed().set({ tree: L.updateGroup(ed().tree, id, { icon }) }, focusKey);
+      setIcon: (id, icon) => {
+        if (icon !== null && !L.validIcon(icon)) return;
+        ed().tree = L.updateGroup(ed().tree, id, { icon });
+        ed().patchGroup(id);
       },
       ungroup: (id) => {
         const first = L.locate(ed().tree, L.groupKey(id))?.node.children.find((c) => !c.missing);
@@ -924,7 +1078,8 @@ class Controller {
         const hidden = new Set(ed().hiddenSet);
         if (hidden.has(path)) hidden.delete(path);
         else hidden.add(path);
-        ed().set({ hiddenSet: hidden }, `eye:${path}`);
+        ed().hiddenSet = hidden;
+        ed().patchRow(path);
       },
       moveBy: (key, delta) => {
         const tree = L.moveBy(ed().tree, key, delta);
@@ -953,6 +1108,7 @@ class Controller {
         }
       },
       setDefault: async () => {
+        if (ed().focusInvalidName()) return;
         if (await this.save(ed().tree, ed().hiddenSet, false))
           try {
             await this.hass.callWS({ type: `${DOMAIN}/default/set`, layout: L.toLayout(ed().tree) });
@@ -977,9 +1133,8 @@ class Controller {
     try {
       await this.hass.callWS({ type: `${DOMAIN}/save`, layout: L.toLayout(tree) });
       const current = (await this.hass.callWS({ type: "frontend/get_user_data", key: "sidebar" }))?.value ?? {};
-      const panelOrder = L.flatten(tree).filter((p) => known.has(p) && !(invisible.has(p) && hidden.has(p)));
-      const hiddenPanels = [...hidden].filter((p) => known.has(p) && !invisible.has(p));
-      await this.hass.callWS({ type: "frontend/set_user_data", key: "sidebar", value: { ...current, panelOrder, hiddenPanels } });
+      const value = L.nativeSidebar(current, tree, known, hidden, invisible);
+      await this.hass.callWS({ type: "frontend/set_user_data", key: "sidebar", value });
     } catch (err) {
       this.editor.set({ error: t(this.lang, "saveFailed", { error: err?.message ?? err }) });
       return false;
