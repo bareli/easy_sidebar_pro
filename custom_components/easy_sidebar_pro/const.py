@@ -24,8 +24,10 @@ NAMED_COLORS = (
     "primary", "accent", "red", "pink", "purple", "indigo", "blue", "cyan",
     "teal", "green", "lime", "amber", "orange", "brown", "grey",
 )
-HEADER_STYLES = ("plain", "tinted", "line")
+HEADER_STYLES = ("plain", "tinted", "line", "pill")
 DIVIDER_STYLES = ("line", "none")
+# Keys of a stored group, in output order (layout.js GROUP_KEYS is the same list).
+GROUP_KEYS = ("name", "icon", "color", "icon_color", "start_open", "panels")
 DEFAULT_SETTINGS = {
     "start_collapsed": False,
     "accordion": False,

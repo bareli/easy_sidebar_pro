@@ -3,6 +3,11 @@
 Collapsible groups for the Home Assistant sidebar, edited right inside the sidebar with drag and drop.
 Hebrew and English, right-to-left aware.
 
+**Same layout on every device.** Your groups, order, colours and display settings are stored in Home
+Assistant for your user, not in the browser, so the sidebar looks the same on every computer, tablet and
+phone, and in the companion app. An admin can press **Set as default for everyone** in the editor to give
+the same layout to every user who has not made their own.
+
 ![Icon](custom_components/easy_sidebar_pro/brand/icon.png)
 
 ## What it does
@@ -34,11 +39,21 @@ Hebrew and English, right-to-left aware.
   beside its items) and an icon colour. Choose one of Home Assistant's theme colours, which follow your
   theme in light and dark mode, or any `#rrggbb` colour. If a colour would be hard to read on your theme
   it is darkened or lightened just enough (WCAG AA). Under **Display** in the editor: group headers plain,
-  with a tinted background or with a line above, and the line beside grouped items shown or hidden.
+  with a tinted background, with a line above, or **rounded with background** (a pill a step lighter than
+  the sidebar on dark themes and a step darker on light ones, tinted with the group's colour if it has one),
+  and the line beside grouped items shown or hidden.
 - **Collapse settings** (editor, **Display**): groups start collapsed on every page load; only one group
   open at a time; a collapse / expand all button next to the sidebar title (off by default, because it
   shortens the title). With "one group open at a time" the button only collapses, and is hidden while every
   group is folded.
+- **A group that starts open**: with "Groups start collapsed" on, each group row in the editor gets an
+  open folder button. Groups with it pressed start open on every page load, the rest start folded. With
+  "One group open at a time" only the first of them (top to bottom) opens.
+  What decides the folding when a page loads:
+  1. "Groups start collapsed" on: the "starts open" buttons decide (as above). Folding during the visit
+     is not saved.
+  2. "Groups start collapsed" off: each group is as you last left it (remembered per user, on every
+     device). The "starts open" buttons have no effect and are hidden in the editor.
 - **Pinned icons at the bottom**: drag items into **Pinned at the bottom** in the editor. They appear as a
   compact grid of icons above Settings and Notifications (four per row; one column when the sidebar shows
   icons only). Hover or focus an icon for its name. With the keyboard, use the arrow keys inside the grid
@@ -66,8 +81,8 @@ Themes can restyle the groups. A colour set on a group in the editor wins over t
 |---|---|
 | `esp-group-header-text-color` | group header name |
 | `esp-group-header-icon-color` | group header icon |
-| `esp-group-header-background` | header background when headers are "tinted" |
-| `esp-group-header-radius` | header corner radius |
+| `esp-group-header-background` | header background when headers are "tinted" or "rounded" |
+| `esp-group-header-radius` | header corner radius (also of "rounded" headers) |
 | `esp-group-divider-color` | line beside grouped items, and "line above" headers |
 | `esp-group-divider-width` | width of the line beside grouped items (default 2px) |
 

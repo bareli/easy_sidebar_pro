@@ -36,7 +36,7 @@ def test_old_layout_gets_defaults():
     """A v0.1 / v0.2 layout (no colours, grid or settings) loads with the defaults."""
     old = {"version": 1, "order": ["g:a", "map"], "groups": {"a": {"name": "A", "icon": None, "panels": ["todo"]}}}
     out = validate_layout(old)
-    assert out["groups"]["a"] == {"name": "A", "icon": None, "color": None, "icon_color": None, "panels": ["todo"]}
+    assert out["groups"]["a"] == {"name": "A", "icon": None, "color": None, "icon_color": None, "start_open": False, "panels": ["todo"]}
     assert out["grid"] == []
     assert out["settings"] == DEFAULT_SETTINGS
     assert validate_layout(out) == out
@@ -166,7 +166,7 @@ def test_js_rules_match_server():
     import pathlib
     import re
 
-    from custom_components.easy_sidebar_pro.const import DIVIDER_STYLES, HEADER_STYLES
+    from custom_components.easy_sidebar_pro.const import DIVIDER_STYLES, GROUP_KEYS, HEADER_STYLES
 
     js = (pathlib.Path(__file__).parent.parent / "custom_components" / "easy_sidebar_pro" / "www" / "layout.js").read_text(encoding="utf-8")
 
@@ -176,6 +176,69 @@ def test_js_rules_match_server():
     assert json.loads(const("NAMED_COLORS")) == list(NAMED_COLORS)
     assert json.loads(const("HEADER_STYLES")) == list(HEADER_STYLES)
     assert json.loads(const("DIVIDER_STYLES")) == list(DIVIDER_STYLES)
+    # Group fields (#33 start_open): same keys, same order as the server's output.
+    assert json.loads(const("GROUP_KEYS")) == list(GROUP_KEYS)
+    assert list(validate_layout(FULL)["groups"]["home"]) == list(GROUP_KEYS)
     assert int(const("MAX_PINNED")) == MAX_PINNED
     defaults = re.sub(r"(\w+):", r'"\1":', const("DEFAULT_SETTINGS")[len("Object.freeze(") : -1])
     assert json.loads(defaults) == DEFAULT_SETTINGS
+
+
+# ---- forum requests: per-group "starts open" (#33) and the "pill" header style (#34) ----
+
+
+def test_start_open_validated_and_defaulted():
+    data = copy.deepcopy(FULL)
+    data["groups"]["home"]["start_open"] = True
+    assert validate_layout(data)["groups"]["home"]["start_open"] is True
+    del data["groups"]["home"]["start_open"]
+    assert validate_layout(data)["groups"]["home"]["start_open"] is False
+
+
+@pytest.mark.parametrize("value", [1, 0, "true", None, [], {"a": 1}])
+def test_start_open_must_be_boolean(value):
+    data = copy.deepcopy(FULL)
+    data["groups"]["home"]["start_open"] = value
+    with pytest.raises(LayoutError, match=r"start_open: must be true or false"):
+        validate_layout(data)
+
+
+def test_pill_header_style():
+    assert validate_settings({"header": "pill"})["header"] == "pill"
+    for bad in ("Pill", "pill ", "rounded"):
+        with pytest.raises(LayoutError, match="settings.header"):
+            validate_settings({"header": bad})
+
+
+async def test_ws_forum_layout_per_user_and_default(hass: HomeAssistant, entry: MockConfigEntry, hass_ws_client, hass_read_only_access_token) -> None:
+    """The forum setup (main group starts open, accordion, pill) saves per user and as the admin default."""
+    forum = copy.deepcopy(FULL)
+    forum["order"] = ["lovelace", "g:home", "g:media", "map"]
+    forum["groups"]["home"]["start_open"] = True
+    forum["groups"]["media"] = {"name": "Media", "icon": None, "panels": ["media-browser"]}
+    forum["settings"] = {"start_collapsed": True, "accordion": True, "header": "pill"}
+    admin = await hass_ws_client(hass)
+    user = await hass_ws_client(hass, hass_read_only_access_token)
+    await user.send_json_auto_id({"type": f"{DOMAIN}/subscribe"})
+    assert (await user.receive_json())["success"]
+    await user.receive_json()
+
+    await admin.send_json_auto_id({"type": f"{DOMAIN}/default/set", "layout": forum})
+    assert (await admin.receive_json())["success"]
+    event = (await user.receive_json())["event"]
+    assert event["layout"]["groups"]["home"]["start_open"] is True
+    assert event["layout"]["groups"]["media"]["start_open"] is False
+    assert event["layout"]["settings"]["header"] == "pill"
+
+    forum["groups"]["media"]["start_open"] = True
+    await user.send_json_auto_id({"type": f"{DOMAIN}/save", "layout": forum})
+    msgs = [await user.receive_json(), await user.receive_json()]
+    assert any(m.get("type") == "result" and m["success"] for m in msgs)
+    event = next(m for m in msgs if m.get("type") == "event")["event"]
+    assert event["own"] is True and event["layout"]["groups"]["media"]["start_open"] is True
+    store = hass.data[DATA_STORE]
+    assert store.default["groups"]["media"]["start_open"] is False
+
+    forum["groups"]["media"]["start_open"] = "yes"
+    await user.send_json_auto_id({"type": f"{DOMAIN}/save", "layout": forum})
+    assert (await user.receive_json())["error"]["code"] == "invalid_format"

@@ -74,6 +74,12 @@ def _color(value: Any, where: str) -> str | None:
     return value
 
 
+def _flag(value: Any, where: str) -> bool:
+    if not isinstance(value, bool):
+        raise LayoutError(f"{where}: must be true or false")
+    return value
+
+
 def validate_settings(data: Any) -> dict[str, Any]:
     """Display and collapse settings; missing keys take their defaults, unknown keys are refused."""
     if data is None:
@@ -175,6 +181,7 @@ def validate_layout(data: Any) -> dict[str, Any]:
             "icon": icon,
             "color": _color(group.get("color"), f"{where}.color"),
             "icon_color": _color(group.get("icon_color"), f"{where}.icon_color"),
+            "start_open": _flag(group.get("start_open", False), f"{where}.start_open"),
             "panels": clean_panels,
         }
 

@@ -18,6 +18,7 @@ const ICONS = {
   pin: "M16,12V4H17V2H7V4H8V12L6,14V16H11.2V22H12.8V16H18V14L16,12Z",
   collapseAll: "M16.59,5.41L15.17,4L12,7.17L8.83,4L7.41,5.41L12,10M7.41,18.59L8.83,20L12,16.83L15.17,20L16.58,18.59L12,14L7.41,18.59Z",
   expandAll: "M12,18.17L8.83,15L7.42,16.41L12,21L16.59,16.41L15.17,15M12,5.83L15.17,9L16.58,7.59L12,3L7.41,7.59L8.83,9L12,5.83Z",
+  folderOpen: "M6.1,10L4,18V8H21A2,2 0 0,0 19,6H12L10,4H4A2,2 0 0,0 2,6V18A2,2 0 0,0 4,20H19C19.9,20 20.7,19.4 20.9,18.5L23.2,10H6.1M19,18H6L7.6,12H20.6L19,18Z",
 };
 
 const PANEL_ICONS = {
@@ -78,13 +79,15 @@ const STRINGS = {
     c_grey: "Grey",
     display: "Display",
     startCollapsed: "Groups start collapsed",
-    startCollapsedHelp: "On every page load. Folding a group is then not remembered.",
+    startCollapsedHelp: "On every page load, except groups whose open folder button is on (with one group open at a time: the first of them). Folding is then not remembered.",
+    startOpen: "{name} opens on page load",
     accordion: "One group open at a time",
     toggleAllOption: "Collapse / expand all button next to the title",
     headerStyle: "Group headers",
     header_plain: "Plain",
     header_tinted: "Tinted background",
     header_line: "Line above",
+    header_pill: "Rounded with background",
     dividerStyle: "Line beside grouped items",
     divider_line: "Show",
     divider_none: "Hide",
@@ -169,13 +172,15 @@ const STRINGS = {
     c_grey: "אפור",
     display: "תצוגה",
     startCollapsed: "הקבוצות מתחילות מקופלות",
-    startCollapsedHelp: "בכל טעינה של הדף. קיפול של קבוצה לא נשמר.",
+    startCollapsedHelp: "בכל טעינה של הדף, חוץ מקבוצות שכפתור התיקייה הפתוחה שלהן מופעל (כשרק קבוצה אחת פתוחה: הראשונה מהן). קיפול של קבוצה לא נשמר.",
+    startOpen: "{name} נפתחת בטעינת הדף",
     accordion: "קבוצה אחת פתוחה בכל פעם",
     toggleAllOption: "כפתור קיפול ופתיחה של הכול ליד הכותרת",
     headerStyle: "כותרות הקבוצות",
     header_plain: "רגילות",
     header_tinted: "רקע צבעוני",
     header_line: "קו מעל",
+    header_pill: "מעוגלות עם רקע",
     dividerStyle: "קו לצד הפריטים שבקבוצה",
     divider_line: "להציג",
     divider_none: "להסתיר",
@@ -308,6 +313,11 @@ const GROUP_CSS = `
 :host([header="line"]) { border-top: 1px solid var(--esp-own-line, var(--esp-group-divider-color, var(--divider-color))); padding-top: 4px; margin-inline: 8px; }
 :host([header="line"]) .row { margin-inline: -4px; }
 :host([header="line"]:first-child) { border-top-color: transparent; }
+/* Pill: fully rounded, a background a step lighter (dark themes) or darker (light themes) than the
+   sidebar; the frontend sets --esp-own-bg and contrast-adjusted text, count and chevron colours for it. */
+:host([header="pill"]) .row { border-radius: var(--esp-group-header-radius, 20px);
+  background-color: var(--esp-own-bg, var(--esp-group-header-background, rgba(var(--rgb-primary-text-color, 0,0,0), 0.08))); }
+:host([header="pill"]) .count, :host([header="pill"]) .chev { color: var(--esp-own-sub, var(--secondary-text-color)); }
 .row:hover { background-image: linear-gradient(var(--sidebar-hover-background-color, rgba(var(--rgb-primary-text-color, 0,0,0), 0.06)), var(--sidebar-hover-background-color, rgba(var(--rgb-primary-text-color, 0,0,0), 0.06))); }
 .row:focus { outline: none; }
 .row:focus-visible { outline: 2px solid var(--primary-color); outline-offset: -2px; }
@@ -317,8 +327,8 @@ const GROUP_CSS = `
 .chev { width: 20px; height: 20px; flex: none; fill: currentColor; color: var(--secondary-text-color); transition: transform 0.15s; }
 :host([collapsed]) .chev { transform: rotate(-90deg); }
 :host([collapsed][rtl]) .chev { transform: rotate(90deg); }
-:host([selected]) .row { color: var(--sidebar-selected-text-color, var(--primary-color)); }
-:host([selected]) .icon { color: var(--sidebar-selected-icon-color, var(--primary-color)); }
+:host([selected]) .row { color: var(--esp-own-sel, var(--sidebar-selected-text-color, var(--primary-color))); }
+:host([selected]) .icon { color: var(--esp-own-sel-icon, var(--sidebar-selected-icon-color, var(--primary-color))); }
 :host([icon-only]) .name, :host([icon-only]) .count, :host([icon-only]) .chev { display: none; }
 :host([icon-only]) .row { padding-inline: 12px; justify-content: flex-start; }
 :host([icon-only][collapsed]) .row { border-inline-start: 3px solid var(--divider-color); padding-inline-start: 9px; }
@@ -359,12 +369,15 @@ class EspGroup extends HTMLElement {
     this.onToggle?.();
   }
 
-  /** look: { text, icon, bg, line } CSS colours (null = theme default) and header ("plain" | "tinted" | "line"). */
+  /** look: { text, icon, bg, line, sub, sel, selIcon } CSS colours (null = theme default) and header (L.HEADER_STYLES). */
   update(row, lang, iconOnly, rtl, look = null, header = "plain") {
     setVar(this, "--esp-own-color", look?.text);
     setVar(this, "--esp-own-icon-color", look?.icon);
     setVar(this, "--esp-own-bg", look?.bg);
     setVar(this, "--esp-own-line", look?.line);
+    setVar(this, "--esp-own-sub", look?.sub);
+    setVar(this, "--esp-own-sel", look?.sel);
+    setVar(this, "--esp-own-sel-icon", look?.selIcon);
     if (this.getAttribute("header") !== header) this.setAttribute("header", header);
     this._icon.icon = row.icon || DEFAULT_ICON;
     this._name.textContent = row.name;
@@ -473,6 +486,8 @@ button { font: inherit; color: inherit; }
 .color-line input[type="color"] { flex: none; width: 36px; height: 32px; padding: 0 2px; border: 1px solid var(--divider-color); border-radius: 6px; background: none; cursor: pointer; }
 .color-line input[type="text"] { flex: 1; min-width: 0; font: inherit; color: inherit; background: transparent; border: 1px solid var(--divider-color); border-radius: 6px; padding: 6px; }
 .color-line input[aria-invalid="true"] { border-color: var(--esp-error-color); }
+.open-btn[aria-pressed="true"] { background: rgba(var(--rgb-primary-color, 3,169,244), 0.18); color: var(--esp-action-color); }
+:host(:not([start-collapsed])) .open-btn { display: none; }
 .pins { border-style: dashed; }
 .pins > .row.head { cursor: default; }
 .pins .head-space { flex: none; width: 32px; }
@@ -579,6 +594,7 @@ class EspEditor extends HTMLElement {
     const headIcon = iconBtn?.querySelector(".icon");
     if (headIcon) headIcon.icon = node.icon || DEFAULT_ICON;
     label(`[data-focus-key="ungroup:${id}"]`, t(lang, "ungroup", { name: node.name }), true);
+    label(`[data-focus-key="open:${id}"]`, t(lang, "startOpen", { name: node.name }), true)?.setAttribute("aria-pressed", String(node.start_open === true));
     label(`[data-children="${id}"]`, node.name);
     const pending = this.nameErrors.get(id);
     const input = this._q(`[data-focus-key="name:${id}"]`);
@@ -637,6 +653,7 @@ class EspEditor extends HTMLElement {
     // Titles take their own direction (dir=auto, so a long English title shows its start) but keep
     // the page's alignment. HA sets the page direction on <html dir>.
     this.toggleAttribute("rtl", (document.documentElement.dir || getComputedStyle(document.documentElement).direction) === "rtl");
+    this.toggleAttribute("start-collapsed", !!this.settings?.start_collapsed);
     const active = root.activeElement;
     const focusKey = this.focusKey ?? active?.dataset?.focusKey ?? null;
     for (const id of [...this.nameErrors.keys()]) if (!this.tree.some((n) => n.type === "group" && n.id === id)) this.nameErrors.delete(id);
@@ -762,6 +779,20 @@ class EspEditor extends HTMLElement {
         iconEl(node.icon || DEFAULT_ICON),
       ),
       input,
+      // "Starts open" matters only while groups start collapsed: shown with that setting (host attribute).
+      h(
+        "button",
+        {
+          class: "icon-btn open-btn",
+          type: "button",
+          "aria-pressed": String(node.start_open === true),
+          "aria-label": t(lang, "startOpen", { name: node.name }),
+          title: t(lang, "startOpen", { name: node.name }),
+          "data-focus-key": `open:${node.id}`,
+          onclick: () => this.actions.setStartOpen(node.id, node.start_open !== true),
+        },
+        svg(ICONS.folderOpen),
+      ),
       h(
         "button",
         {
@@ -1305,6 +1336,7 @@ class Controller {
     this.writtenSig = null;
     // "Groups start collapsed": folding lives in this page only (null = the stored state is used).
     this.session = null;
+    this.sessionInitial = false;
     this.seenData = false;
     // Pinned panels (bottom grid): HA's own rows rendered by the _renderFixedPanels patch.
     this.pinPanels = [];
@@ -1379,10 +1411,17 @@ class Controller {
     clearTimeout(this.holdTimer);
     this.data = data;
     this.serverLayout = data.layout;
-    // On a page load every group starts folded; turned on later in this page, the current state is kept.
+    // On a page load every group starts folded except those marked "starts open" (worked out at the
+    // first render, when the visible panels are known); turned on later in this page, the current state is kept.
     if (L.cleanSettings(data.layout?.settings).start_collapsed) {
-      if (this.session === null) this.session = this.seenData ? [...(data.collapsed ?? [])] : Object.keys(data.layout?.groups ?? {});
-    } else this.session = null;
+      if (this.session === null) {
+        this.session = this.seenData ? [...(data.collapsed ?? [])] : Object.keys(data.layout?.groups ?? {});
+        this.sessionInitial = !this.seenData;
+      }
+    } else {
+      this.session = null;
+      this.sessionInitial = false;
+    }
     this.seenData = true;
     if (this.editor && this.editing)
       this.editor.set({ isAdmin: data.is_admin, own: data.own, hasDefault: !!data.default, sameAsDefault: this.sameAsDefault() });
@@ -1453,6 +1492,10 @@ class Controller {
     const layout = this.viewLayout();
     const visible = [...byPath.keys()];
     this.settings = L.cleanSettings(layout?.settings);
+    if (this.sessionInitial && this.session !== null) {
+      this.session = L.initialCollapsed(layout, visible, this.settings.accordion);
+      this.sessionInitial = false;
+    }
     this.pinPaths = L.pinned(layout, visible);
     this.pinPanels = this.pinPaths.map((p) => byPath.get(p));
     const rows = L.arrange(layout, visible, this.collapsed, selected);
@@ -1532,7 +1575,22 @@ class Controller {
     const side = read("var(--sidebar-background-color, var(--primary-background-color, #fafafa))") ?? page;
     const bg = L.over(side, pageBg);
     const text = L.over(read("var(--sidebar-text-color, var(--primary-text-color, #212121))") ?? [33, 33, 33, 1], bg);
-    this.pal = { themes, read, bg, text, cache: new Map() };
+    const opaque = (css, fallback) => L.over(read(css) ?? fallback, bg);
+    // What a pill header draws on its own background (theme hooks first, as in GROUP_CSS).
+    const headBg = read("var(--esp-group-header-background, transparent)");
+    this.pal = {
+      themes,
+      read,
+      bg,
+      text,
+      headerBg: headBg && headBg[3] > 0 ? L.over(headBg, bg) : null,
+      headText: opaque("var(--esp-group-header-text-color, var(--sidebar-text-color, var(--primary-text-color, #212121)))", text),
+      headIcon: opaque("var(--esp-group-header-icon-color, var(--sidebar-icon-color, var(--secondary-text-color, #727272)))", text),
+      sub: opaque("var(--secondary-text-color, #727272)", text),
+      sel: opaque("var(--sidebar-selected-text-color, var(--primary-color, #03a9f4))", text),
+      selIcon: opaque("var(--sidebar-selected-icon-color, var(--primary-color, #03a9f4))", text),
+      cache: new Map(),
+    };
     return this.pal;
   }
 
@@ -1548,7 +1606,7 @@ class Controller {
    * icons and lines 3:1 (non-text). The colour moves toward the theme's text colour only as far as needed.
    */
   look(color, iconColor, header = "plain") {
-    if (!color && !iconColor) return null;
+    if (!color && !iconColor && header !== "pill") return null;
     const pal = this.palette();
     if (!pal) return null;
     const key = `${color}|${iconColor}|${header}`;
@@ -1560,14 +1618,19 @@ class Controller {
     };
     const c = resolve(color);
     const ic = resolve(iconColor) ?? c;
-    const tint = header === "tinted" && c ? L.mix(pal.bg, L.over(c, pal.bg), 0.14).map((v) => Math.round(v)) : null;
+    const pill = header === "pill";
+    const tint = header === "tinted" && c ? L.mix(pal.bg, L.over(c, pal.bg), 0.14).map((v) => Math.round(v)) : pill ? L.pillBackground(pal, c) : null;
     const base = tint ?? pal.bg;
+    const on = (fg, min) => L.rgbCss(L.readable(fg, base, pal.text, min));
     const out = {
-      text: c ? L.rgbCss(L.readable(c, base, pal.text, 4.5)) : null,
-      icon: ic ? L.rgbCss(L.readable(ic, base, pal.text, 3)) : null,
+      text: c ? on(c, 4.5) : pill ? on(pal.headText, 4.5) : null,
+      icon: ic ? on(ic, 3) : pill ? on(pal.headIcon, 3) : null,
       member: resolve(iconColor) ? L.rgbCss(L.readable(resolve(iconColor), pal.bg, pal.text, 3)) : null,
       bg: tint ? L.rgbCss(tint) : null,
       line: c ? L.rgbCss(L.readable(c, pal.bg, pal.text, 3)) : null,
+      sub: pill ? on(pal.sub, 4.5) : null,
+      sel: pill ? on(pal.sel, 4.5) : null,
+      selIcon: pill ? on(pal.selIcon, 3) : null,
     };
     pal.cache.set(key, out);
     return out;
@@ -1914,6 +1977,12 @@ class Controller {
       },
       setting: (key, value) => {
         ed().settings = L.cleanSettings({ ...ed().settings, [key]: value });
+        ed().toggleAttribute("start-collapsed", ed().settings.start_collapsed);
+      },
+      setStartOpen: (id, value) => {
+        if (typeof value !== "boolean") return;
+        ed().tree = L.updateGroup(ed().tree, id, { start_open: value });
+        ed().patchGroup(id);
       },
       setIcon: (id, icon) => {
         if (icon !== null && !L.validIcon(icon)) return;

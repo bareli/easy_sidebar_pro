@@ -33,11 +33,11 @@ test("no layout keeps HA's order", () => {
 
 test("toLayout round trip and flatten", () => {
   const tree = buildTree(LAYOUT, PATHS);
-  // v0.3 canonical form: colours, grid and settings always present (defaults for old layouts).
+  // v0.3 canonical form: colours, start_open, grid and settings always present (defaults for old layouts).
   assert.deepEqual(toLayout(tree), {
     ...LAYOUT,
     order: [...LAYOUT.order, "media-browser"],
-    groups: { home: { name: "בית", icon: "mdi:home", color: null, icon_color: null, panels: ["calendar", "todo"] } },
+    groups: { home: { name: "בית", icon: "mdi:home", color: null, icon_color: null, start_open: false, panels: ["calendar", "todo"] } },
     grid: [],
     settings: { start_collapsed: false, accordion: false, toggle_all: false, header: "plain", divider: "line" },
   });

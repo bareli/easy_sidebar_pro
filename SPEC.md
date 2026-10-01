@@ -67,8 +67,8 @@ custom (non-panel) links. (Theming, collapse options and pinned icons were added
 ```
 - v0.3 adds optional keys (layouts without them load with the defaults; the server returns the full form):
   `groups.<id>.color` / `icon_color` (null, a named theme colour or `#rrggbb`), `grid` (pinned panels,
-  at most 20) and `settings` `{start_collapsed, accordion, toggle_all, header: plain|tinted|line,
-  divider: line|none}`. See section 7.
+  at most 20), `groups.<id>.start_open` (boolean, default false) and `settings` `{start_collapsed,
+  accordion, toggle_all, header: plain|tinted|line|pill, divider: line|none}`. See section 7.
 - `order`: top-level entries, a panel `url_path` or `g:<group id>`.
 - Rules: version 1; group id `[a-z0-9]{1,16}`; every group appears in `order` exactly once and
   every `g:` entry exists; a panel appears at most once in the whole layout (order, groups and grid); name 1-50 chars, no
@@ -120,7 +120,7 @@ custom (non-panel) links. (Theming, collapse options and pinned icons were added
 - Layout per user, stored server side, with an admin default.
 - Edit mode entry: pencil button in the sidebar header; HA's long-press keeps opening HA's dialog.
 
-## 7. v0.3: styling, collapse settings, pinned grid (issues #27, #28, #29)
+## 7. v0.3: styling, collapse settings, pinned grid (issues #27, #28, #29, #33, #34)
 
 Requested for parity with Sidebar Organizer. Everything is part of the layout (per user, admin default),
 edited in the in-sidebar editor, validated by `layout.py` and mirrored in `layout.js`.
@@ -136,7 +136,12 @@ edited in the in-sidebar editor, validated by `layout.py` and mirrored in `layou
   HA's own sidebar does not do) and mixes the colour toward the theme's text colour only as far
   as needed: 4.5:1 for the name (on the tinted header background when used), 3:1 for icons and lines.
 - `settings.header`: `plain` | `tinted` (background = 14% of the group colour, or a neutral tint) |
-  `line` (a line above each group, not above the first row). `settings.divider`: `line` | `none` (the
+  `line` (a line above each group, not above the first row) | `pill` (#34, forum request: fully rounded,
+  radius 20 px, background = the theme's `--esp-group-header-background`, else the sidebar mixed 10% toward
+  its text colour, i.e. lighter on dark themes and darker on light ones; a group colour tints that by 18%).
+  For `pill` the frontend computes the background and adjusts the name (4.5:1), the count and chevron
+  (4.5:1), the selected colours (4.5:1 / 3:1) and the icon (3:1) against it with the same contrast
+  function; it is recomputed on a theme or light / dark change. `settings.divider`: `line` | `none` (the
   guide line beside grouped items).
 - Theme CSS variables (lower precedence than a group's own colour): `--esp-group-header-text-color`,
   `--esp-group-header-icon-color`, `--esp-group-header-background`, `--esp-group-header-radius`,
@@ -149,6 +154,15 @@ edited in the in-sidebar editor, validated by `layout.py` and mirrored in `layou
 - `accordion`: opening a group folds every other shown group. "Expand all" would break that, so with
   `accordion` the `toggle_all` button only collapses: it is shown while a group is open and hidden when
   every group is folded.
+- `groups.<id>.start_open` (#33, forum request): with `start_collapsed`, a page load folds every group
+  except those with `start_open`; with `accordion` only the first of them in sidebar order among the groups
+  shown (with a visible panel) opens. Worked out at the first render after the layout arrives (the visible
+  panels are known then); later layout pushes in the same page do not re-apply it.
+  Precedence on a page load: (1) `start_collapsed` on: `start_open` decides, stored fold memory is ignored
+  and folding is not written; (2) `start_collapsed` off: the user's stored folded set applies and
+  `start_open` has no effect. Editor: an open-folder toggle button (`aria-pressed`) on each group row,
+  shown only while "Groups start collapsed" is checked. Server: boolean or refused (`invalid_format`),
+  missing = false.
 - `toggle_all`: a collapse all / expand all button next to the sidebar title (expanded sidebar only,
   two or more groups). Off by default: it shortens the title. The title takes its direction from its own
   text (`unicode-bidi: plaintext`), so a Latin name in a Hebrew UI is cut at its end ("Home Assi...").
