@@ -16,3 +16,11 @@
   - Never edit config files with Windows PowerShell 5.1 `Get-Content`/`Set-Content`: it corrupts
     UTF-8 Hebrew and HA then refuses to start.
   - `turbojpeg` / `google_translate` errors in the HA log are environmental, unrelated.
+  - **HA 2026.9 keeps the HTTP port in `.storage/http`** (`stable` / `pending`). A fresh instance
+    imports the yaml `server_port` as *pending*; unless promoted (WS `http/config/promote`) within
+    5 minutes, HA reverts to `stable` (8123) and restarts itself. The launcher does not relaunch, so
+    the instance vanishes or reappears on 8123 (and a second instance then fails to bind). Fix:
+    promote right after seeding, or with HA stopped set `stable.server_port` to the port and
+    `pending` to null.
+  - Background launcher tasks are killed at their time limit (default 30 min): start instances with
+    the maximum limit.
