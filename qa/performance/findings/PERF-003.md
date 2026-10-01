@@ -5,7 +5,7 @@
 | Type | PERFORMANCE BUG |
 | Severity | LOW |
 | Evidence basis | MEASURED |
-| Status | DRAFT - claimed 2026-10-01, not yet filed (orchestrator files) |
+| Status | CLOSED - qa:verified 2026-10-01 (see #23) |
 | Issue | [#23](https://github.com/bareli/easy_sidebar_pro/issues/23) |
 | Feature | Editor (`Controller.startEdit` / `stopEdit`, `render()` returning `[this.editor]`) |
 | Test case | PERF |

@@ -5,8 +5,8 @@
 | Type | PERFORMANCE OPTIMIZATION |
 | Severity | LOW |
 | Evidence basis | ANALYTICAL (plus a short load comparison that does not cover this) |
-| Status | DRAFT - claimed 2026-10-01, not yet filed (orchestrator files) |
-| Issue | |
+| Status | CLOSED - qa:verified 2026-10-01 (see #22) |
+| Issue | [#22](https://github.com/bareli/easy_sidebar_pro/issues/22) |
 | Feature | `www/easy-sidebar-pro.js`: `EspEditor.render`, `Controller.render`, `afterUpdate`, drag handlers |
 | Test case | PERF |
 | Environment | dev (instance 8140 died mid-run; see "Not measured") |

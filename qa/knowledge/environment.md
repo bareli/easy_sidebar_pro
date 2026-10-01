@@ -40,3 +40,4 @@
     itself retains the counted elements and inflates the numbers (it did, PERF-003).
   - Dark theme in Playwright: `localStorage.selectedTheme = {"dark": true}` before load.
   - Each HA state change re-renders `ha-sidebar` (updates = state changes).
+  - Synthetic touch: a tap sent right after a fast CDP touch swipe is swallowed by Chromium fling handling; end swipes at rest (a few moves at the final point) before tapping.

@@ -5,8 +5,8 @@
 | Type | PERFORMANCE RISK |
 | Severity | LOW |
 | Evidence basis | MEASURED (validator in isolation); the full websocket path was not measured |
-| Status | DRAFT - claimed 2026-10-01, not yet filed (orchestrator files) |
-| Issue | |
+| Status | CLOSED - qa:verified 2026-10-01 (see #21) |
+| Issue | [#21](https://github.com/bareli/easy_sidebar_pro/issues/21) |
 | Feature | WS `easy_sidebar_pro/save` and `default/set`, `layout.py` `validate_layout` |
 | Test case | PERF |
 | Environment | dev (no instance involved; module run directly, Python 3.14.3, Windows) |
