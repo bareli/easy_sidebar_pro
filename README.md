@@ -20,8 +20,9 @@ Hebrew and English, right-to-left aware.
   the same on every computer, tablet and in the companion app.
 - **Admin default**: an admin can press "Set as default for everyone". Users who never edited their
   sidebar get that layout; anyone can go back to it with "Reset to the default layout". These actions
-  ask for confirmation inside the editor first. A user on the default who saves a change is told once
-  that the layout becomes their own.
+  ask for confirmation inside the editor first. A user on the default who only hides or shows panels
+  keeps following it (only Home Assistant's hidden list is written); any other saved change tells them
+  once that the layout becomes their own.
 - **Works with Home Assistant's own sidebar settings**: order and hidden panels are written to Home
   Assistant's own sidebar settings too. Its long-press "Edit sidebar" dialog keeps working: hiding
   works as before, and a new order saved there is applied to your layout (groups stay; panels inside

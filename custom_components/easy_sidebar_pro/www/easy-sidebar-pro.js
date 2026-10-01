@@ -46,6 +46,7 @@ const STRINGS = {
     addGroup: "Add group",
     newGroup: "New group",
     groupName: "Group name",
+    inGroup: "in group {name}",
     groupIcon: "Icon of {name}",
     iconHelp: "Icon, for example mdi:home",
     iconInvalid: "Use the form mdi:name",
@@ -90,6 +91,7 @@ const STRINGS = {
     addGroup: "הוספת קבוצה",
     newGroup: "קבוצה חדשה",
     groupName: "שם הקבוצה",
+    inGroup: "בקבוצה {name}",
     groupIcon: "הסמל של {name}",
     iconHelp: "סמל, למשל mdi:home",
     iconInvalid: "יש לכתוב בצורה mdi:name",
@@ -896,6 +898,7 @@ customElements.get("esp-editor") || customElements.define("esp-editor", EspEdito
 /* ------------------------------------------------------------------ controller (one per ha-sidebar) */
 
 const SIDEBAR_CSS = `
+.esp-sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 :host([expanded]) ha-list-item-button[data-esp-group] { margin-inline-start: 18px; width: calc(var(--ha-sidebar-expanded-item-width, 248px) - 14px); }
 :host([narrow][expanded]) ha-list-item-button[data-esp-group] { width: calc(226px - var(--safe-area-inset-left, 0px)); }
 :host([expanded]) ha-list-item-button[data-esp-group]::after { content: ""; position: absolute; inset-block: 0 -4px; inset-inline-start: -8px; width: 2px;
@@ -920,6 +923,9 @@ class Controller {
     this.dirty = false;
     this.groupEls = new Map();
     this.rowGroups = new Map();
+    this.groupNames = new Map();
+    this.descIds = new Map();
+    this.descEls = new Map();
     this.lastInGroup = new Set();
     this.unsub = null;
     this.subscribing = false;
@@ -1048,6 +1054,7 @@ class Controller {
     const byPath = new Map(panels.map((p) => [p.url_path, p]));
     const rows = L.arrange(this.data.layout, [...byPath.keys()], this.data.collapsed, selected);
     this.rowGroups = new Map(rows.filter((r) => r.type === "panel").map((r) => [r.path, r.group]));
+    this.groupNames = new Map(rows.filter((r) => r.type === "group").map((r) => [r.id, r.name]));
     this.lastInGroup = new Set(rows.filter((r) => r.type === "panel" && r.last).map((r) => r.path));
     // HA reflects `expanded` from `alwaysExpand` in updated(), i.e. after this render: read the property.
     const iconOnly = typeof this.sb.alwaysExpand === "boolean" ? !this.sb.alwaysExpand : !this.sb.hasAttribute("expanded");
@@ -1071,6 +1078,27 @@ class Controller {
     return out;
   }
 
+  /**
+   * The visually hidden element that names a group for its panels (aria-describedby); one per group,
+   * kept in the sidebar's shadow root so the id reference resolves. Returns its id.
+   */
+  describeGroup(root, group) {
+    // Layout ids are free text: the element id is a counter, always a valid unique id.
+    if (!this.descIds.has(group)) this.descIds.set(group, `esp-gdesc-${this.descIds.size + 1}`);
+    const id = this.descIds.get(group);
+    let el = this.descEls.get(group);
+    if (!el || !el.isConnected) {
+      el = document.createElement("span");
+      el.className = "esp-sr";
+      el.id = id;
+      root.append(el);
+      this.descEls.set(group, el);
+    }
+    const text = t(this.lang, "inGroup", { name: this.groupNames.get(group) ?? "" });
+    if (el.textContent !== text) el.textContent = text;
+    return id;
+  }
+
   afterUpdate() {
     const root = this.sb.shadowRoot;
     if (!root) return;
@@ -1085,9 +1113,21 @@ class Controller {
       // Write only on change: an attribute write per row per update costs a style pass each time.
       if (group) {
         if (item.getAttribute("data-esp-group") !== group) item.setAttribute("data-esp-group", group);
-      } else if (item.hasAttribute("data-esp-group")) item.removeAttribute("data-esp-group");
+        const descId = this.describeGroup(root, group);
+        if (item.getAttribute("aria-describedby") !== descId) item.setAttribute("aria-describedby", descId);
+      } else {
+        if (item.hasAttribute("data-esp-group")) item.removeAttribute("data-esp-group");
+        if (item.hasAttribute("aria-describedby")) item.removeAttribute("aria-describedby");
+      }
       const last = !!group && this.lastInGroup.has(path);
       if (item.hasAttribute("data-esp-last") !== last) item.toggleAttribute("data-esp-last", last);
+    }
+    // Drop the descriptions of groups no panel is in any more.
+    const inUse = new Set(this.editing ? [] : this.rowGroups.values());
+    for (const [id, el] of [...this.descEls]) {
+      if (inUse.has(id) && el.isConnected) continue;
+      el.remove();
+      this.descEls.delete(id);
     }
     for (const nav of root.querySelectorAll("ha-list-nav")) {
       // HA's list items unregister from disconnectedCallback, when the event can no longer reach the
@@ -1235,9 +1275,13 @@ class Controller {
       done: () => {
         const e = ed();
         if (e.focusInvalidName()) return;
-        if (!L.editChanged(this.edit.baseTree, e.tree, this.edit.baseHidden, e.hiddenSet)) return this.stopEdit();
+        const kind = L.editKind(this.edit.baseTree, e.tree, this.edit.baseHidden, e.hiddenSet);
+        if (kind === "none") return this.stopEdit();
+        const onDefault = !this.data.own && !!this.data.default;
+        // Hiding/showing is HA's own setting: a user on the default keeps following it.
+        if (kind === "hidden-only" && onDefault) return this.saveHidden(e.hiddenSet);
         // A user on the admin default is told once, before the save, that it stops following the default.
-        if (!this.data.own && this.data.default && !e.forkNoted) {
+        if (onDefault && !e.forkNoted) {
           e.set({ forkNoted: true, notice: t(lang(), "forkNote"), error: "", status: "" }, "done");
           return;
         }
@@ -1343,6 +1387,21 @@ class Controller {
     // The subscription echoes this write back: it is ours, not a change to adopt.
     this.writtenSig = JSON.stringify(value.panelOrder);
     await this.hass.callWS({ type: "frontend/set_user_data", key: "sidebar", value });
+  }
+
+  /** Only HA's hidden list; our layout is not saved, so the user stays on the default. */
+  async saveHidden(hidden) {
+    this.editor.set({ error: "" });
+    try {
+      const current = (await this.hass.callWS({ type: "frontend/get_user_data", key: "sidebar" }))?.value ?? {};
+      const value = L.nativeHidden(current, new Set(this.edit.paths), hidden, this.edit.defaultInvisible);
+      await this.hass.callWS({ type: "frontend/set_user_data", key: "sidebar", value });
+    } catch (err) {
+      this.editor.set({ error: this.failText(err) });
+      return false;
+    }
+    this.stopEdit();
+    return true;
   }
 
   async save(tree, hidden, close = true) {
