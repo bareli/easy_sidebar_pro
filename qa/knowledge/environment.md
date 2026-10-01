@@ -41,3 +41,10 @@
   - Dark theme in Playwright: `localStorage.selectedTheme = {"dark": true}` before load.
   - Each HA state change re-renders `ha-sidebar` (updates = state changes).
   - Synthetic touch: a tap sent right after a fast CDP touch swipe is swallowed by Chromium fling handling; end swipes at rest (a few moves at the final point) before tapping.
+  - Compatibility instances (2026-10-01): venvs `venv-<ha version>` built with uv from `extras.txt`, then
+    component requirements pinned from that version's own manifests (an unpinned `hassil` broke 2026.5:
+    `No module named 'hassil.fuzzy'`, frontend stuck on "Loading data"). Ports 8150 (2026.5.4),
+    8151 (2026.6.4), 8152 (2026.7.4), 8153 (2026.8.3). The HTTP-config confirm dialog / 5-minute revert
+    exists from 2026.8; its modal steals focus from the page (looked like a keyboard bug).
+  - Smoke suite: `~/.claude/qa-playwright/espjs/compat.mjs` (PORT=…): status, render, fold, keyboard open ×5,
+    list registration, drag-merge-save, HA order adoption.

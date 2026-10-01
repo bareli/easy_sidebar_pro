@@ -47,7 +47,8 @@ No `configuration.yaml` changes are needed.
 
 ## Requirements and compatibility
 
-- Home Assistant 2026.9 or newer (the sidebar was rebuilt in 2026; older versions are not tested).
+- Home Assistant 2026.6 or newer (tested on 2026.6.4, 2026.7.4, 2026.8.3 and 2026.9.4). On older
+  versions, whose sidebar is built differently, the integration loads but leaves the sidebar untouched.
 - Do not use it together with another sidebar plugin that changes the panel list (for example
   Sidebar Organizer): both change the same sidebar and the result is unpredictable.
 - If a future Home Assistant release changes the sidebar internals, Easy Sidebar Pro switches itself

@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.2.1 (unreleased)
+
+- Works with Home Assistant 2026.6, 2026.7 and 2026.8 (tested on 2026.6.4, 2026.7.4, 2026.8.3); the minimum version is now 2026.6.0.
+- On older Home Assistant versions (different sidebar) the module now stays off instead of half-working.
+
 ## v0.2.0 (2026-10-01)
 
 Fixes from the first full QA cycle (26 issues, #1 to #26, all verified).

@@ -1503,7 +1503,10 @@ function controllerFor(sb) {
 function patch(cls) {
   const p = cls.prototype;
   if (p.__espPatched) return;
-  if (typeof p._renderPanels !== "function" || typeof p._renderPanel !== "function" || typeof p.shouldUpdate !== "function") {
+  // The list-based sidebar (HA 2026.6+). ha-sidebar imports both elements, so they are defined by now;
+  // the older ha-md-list sidebar has the same render methods but different rows, so stay off there.
+  const listSidebar = customElements.get("ha-list-nav") && customElements.get("ha-list-item-button");
+  if (!listSidebar || typeof p._renderPanels !== "function" || typeof p._renderPanel !== "function" || typeof p.shouldUpdate !== "function") {
     window.__easySidebarPro = { status: "unsupported" };
     return;
   }
