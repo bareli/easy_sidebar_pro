@@ -332,6 +332,7 @@ const GROUP_CSS = `
 :host([icon-only]) .name, :host([icon-only]) .count, :host([icon-only]) .chev { display: none; }
 :host([icon-only]) .row { padding-inline: 12px; justify-content: flex-start; }
 :host([icon-only][collapsed]) .row { border-inline-start: 3px solid var(--divider-color); padding-inline-start: 9px; }
+:host([icon-only][collapsed][header="pill"]) .row { border-inline-start: 0; padding-inline-start: 12px; }
 @media (prefers-reduced-motion: reduce) { .chev { transition: none; } }
 `;
 

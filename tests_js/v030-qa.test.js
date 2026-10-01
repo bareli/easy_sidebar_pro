@@ -201,3 +201,13 @@ test("BUG-015 (#30): a theme change alone re-renders the sidebar and the group c
   sb.hass = { ...sb.hass };
   assert.equal(p.shouldUpdate.call(sb, new Map([["hass", old]])), false);
 });
+
+test("UX (#35): a folded pill header in the icon-only rail has no start border, same shape as open", () => {
+  const css = fs.readFileSync(MODULE, "utf8");
+  const m = css.match(/:host\(\[icon-only\]\[collapsed\]\[header="pill"\]\) \.row \{([^}]*)\}/);
+  assert.ok(m, "pill override for the folded icon-only row exists");
+  assert.match(m[1], /border-inline-start:\s*0/);
+  assert.match(m[1], /padding-inline-start:\s*12px/);
+  // The override must come after the generic folded rule so it wins.
+  assert.ok(css.indexOf(m[0]) > css.indexOf(":host([icon-only][collapsed]) .row {"));
+});
