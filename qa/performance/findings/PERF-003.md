@@ -6,7 +6,7 @@
 | Severity | LOW |
 | Evidence basis | MEASURED |
 | Status | DRAFT - claimed 2026-10-01, not yet filed (orchestrator files) |
-| Issue | |
+| Issue | [#23](https://github.com/bareli/easy_sidebar_pro/issues/23) |
 | Feature | Editor (`Controller.startEdit` / `stopEdit`, `render()` returning `[this.editor]`) |
 | Test case | PERF |
 | Environment | dev, instance 8140, HA 2026.9.x, Playwright Chromium headless, 61 panels, 20 groups (qa_admin layout), warm |
@@ -14,6 +14,14 @@
 | Detected by | qa-performance-engineer |
 | Detected | 2026-10-01 |
 | Model | model:opus |
+
+
+> **Correction (verification, 2026-10-01):** the magnitudes below (heap / node / listener growth per
+> cycle) were measured with `Runtime.queryObjects` results kept in a CDP object group, which itself
+> retains the counted elements, so they are overstated. The defect was real (independent fixer
+> measurement on 11 panels: `ha-list-nav` items 11 → 121 with 110 detached after 10 cycles); the exact
+> per-cycle cost on the old build was not re-measured. Fixed build at 61 panels / 20 groups: flat over
+> 20 cycles, 0 detached `ha-list-item-button` (heap snapshot).
 
 ## Observed
 
