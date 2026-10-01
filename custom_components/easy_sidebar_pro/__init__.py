@@ -9,10 +9,11 @@ from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.typing import ConfigType
 
 from . import websocket
-from .const import DOMAIN, MODULE_FILE, STATIC_URL
+from .const import DOMAIN, MODULE_FILE, SIGNAL_UPDATED, STATIC_URL
 from .store import LayoutStore
 from .websocket import DATA_STORE
 
@@ -39,6 +40,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     store = LayoutStore(hass)
     await store.async_load()
     hass.data[DATA_STORE] = store
+    # Subscriptions opened before a reload must get the new store's data straight away.
+    async_dispatcher_send(hass, SIGNAL_UPDATED, None)
 
     if not hass.data.get(STATIC_REGISTERED_KEY):
         hass.data[STATIC_REGISTERED_KEY] = True
