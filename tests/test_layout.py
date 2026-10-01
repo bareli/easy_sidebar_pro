@@ -64,3 +64,67 @@ def test_collapsed():
         validate_collapsed(["A!"])
     with pytest.raises(LayoutError):
         validate_collapsed("a")
+
+
+def _one_group(**group):
+    return {"version": 1, "order": ["g:abc"], "groups": {"abc": {"name": "n", "panels": [], **group}}}
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        {"version": 1, "order": ["map\n"], "groups": {}},
+        {"version": 1, "order": ["g:abc\n"], "groups": {"abc\n": {"name": "n", "panels": []}}},
+        _one_group(icon="mdi:home\n"),
+        _one_group(panels=["map\n"]),
+        {"version": True, "order": [], "groups": {}},
+        _one_group(icon="javascript:alert"),
+        _one_group(icon="data:text"),
+    ],
+)
+def test_sec_001_strict_validators(data):
+    with pytest.raises(LayoutError):
+        validate_layout(data)
+
+
+def test_sec_001_collapsed_trailing_newline():
+    with pytest.raises(LayoutError):
+        validate_collapsed(["abc\n"])
+
+
+@pytest.mark.parametrize("icon", ["mdi:home", "hass:bell", "phu:hue-bulb", None])
+def test_sec_001_icon_sets_still_accepted(icon):
+    assert validate_layout(_one_group(icon=icon))["groups"]["abc"]["icon"] == icon
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["\u202eevil\u202c", "\u200b\u200b", "a\u200eb", "\u2066x\u2069", "\u0085", "a\u0085b", "\u200d", "\u2028", "\ufeffx"],
+)
+def test_sec_002_invisible_names_rejected(name):
+    with pytest.raises(LayoutError):
+        validate_layout(_one_group(name=name))
+
+
+@pytest.mark.parametrize("name", ["בית", "מטבח וסלון", "غرفة", "Living room", "🏠 Home", "👨\u200d👩\u200d👧", "می\u200cخواهم"])
+def test_sec_002_real_names_accepted(name):
+    assert validate_layout(_one_group(name=name))["groups"]["abc"]["name"] == name
+
+
+class _CountingList(list):
+    iterated = False
+
+    def __iter__(self):
+        type(self).iterated = True
+        return super().__iter__()
+
+
+def test_perf_001_cap_checked_before_iterating():
+    big = _CountingList(f"p{i}" for i in range(100_000))
+    with pytest.raises(LayoutError, match="at most 500 entries"):
+        validate_layout({"version": 1, "order": big, "groups": {}})
+    assert not _CountingList.iterated
+    big_panels = _CountingList(f"p{i}" for i in range(501))
+    with pytest.raises(LayoutError, match="at most 500 entries"):
+        validate_layout(_one_group(panels=big_panels))
+    assert not _CountingList.iterated
