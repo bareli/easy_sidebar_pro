@@ -369,6 +369,8 @@ export function adoptOrder(layout, order) {
     typeof e !== "string" ? undefined : e.startsWith(GROUP_PREFIX) ? groupRank(e.slice(GROUP_PREFIX.length)) : rank.get(e),
   );
   const next = { ...layout, order: order2, groups };
+  // Pinned panels follow HA's relative order among themselves and stay pinned wherever HA lists them (UX-008).
+  if (Array.isArray(layout.grid)) next.grid = resort(layout.grid, (p) => rank.get(p));
   return JSON.stringify(next) === JSON.stringify(layout) ? null : next;
 }
 
@@ -415,11 +417,22 @@ export function anyOpen(collapsed, ids) {
   return ids.some((id) => !set.has(id));
 }
 
-/** Collapse all when any group is open, otherwise expand all. Ids not in `ids` keep their state. */
-export function toggleAll(collapsed, ids) {
+/**
+ * What the collapse / expand all button does now: "collapse" when any group is open, otherwise "expand",
+ * except with "one group open at a time" (accordion), where expanding all would break the rule: null
+ * (the button is hidden until a group is opened).
+ */
+export function allAction(collapsed, ids, accordion = false) {
+  if (anyOpen(collapsed, ids)) return "collapse";
+  return accordion ? null : "expand";
+}
+
+/** Collapse all when any group is open, otherwise expand all (not in accordion mode). Ids not in `ids` keep their state. */
+export function toggleAll(collapsed, ids, accordion = false) {
   const set = new Set(collapsed ?? []);
-  if (anyOpen(collapsed, ids)) for (const id of ids) set.add(id);
-  else for (const id of ids) set.delete(id);
+  const action = allAction(collapsed, ids, accordion);
+  if (action === "collapse") for (const id of ids) set.add(id);
+  else if (action === "expand") for (const id of ids) set.delete(id);
   return [...set];
 }
 

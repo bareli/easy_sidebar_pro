@@ -1263,7 +1263,10 @@ ha-list-item-button[data-esp-group]:not(.selected) ha-svg-icon[slot="start"] { c
 :host([expanded]) ha-list-item-button[data-esp-pin] { width: calc((var(--ha-sidebar-expanded-item-width, 248px) - 28px) / 4); --ha-row-item-padding-inline: 15px; }
 :host([narrow][expanded]) ha-list-item-button[data-esp-pin] { width: calc((240px - var(--safe-area-inset-left, 0px) - 28px) / 4); --ha-row-item-padding-inline: 14px; }
 :host([expanded]) ha-list-item-button[data-esp-pin] .item-text { max-width: 0; opacity: 0; }
-.menu .title { overflow: hidden; text-overflow: ellipsis; }
+/* The title's own text sets its direction, so a Latin name in a Hebrew UI is cut at its end (UX-009);
+   it stays aligned to the header's side, as without the isolation ("start" would follow the text). */
+.menu .title { overflow: hidden; text-overflow: ellipsis; unicode-bidi: plaintext; text-align: left; }
+:host(:dir(rtl)) .menu .title { text-align: right; }
 .esp-btn { flex: none; width: 40px; height: 40px; display: grid; place-items: center; border: none; background: none; padding: 0;
   border-radius: 50%; cursor: pointer; color: var(--sidebar-icon-color, var(--secondary-text-color)); }
 .esp-edit { margin-inline: auto 4px; }
@@ -1671,9 +1674,10 @@ class Controller {
       const edit = button("esp-edit", ICONS.pencil, () => this.startEdit());
       if (all.nextElementSibling !== edit) menu.insertBefore(all, edit);
       const ids = [...this.groupNames.keys()];
-      all.hidden = this.editing || !this.settings.toggle_all || ids.length < 2;
+      const action = L.allAction(this.collapsed, ids, this.settings.accordion);
+      all.hidden = this.editing || !this.settings.toggle_all || ids.length < 2 || !action;
       if (!all.hidden) {
-        const open = L.anyOpen(this.collapsed, ids);
+        const open = action === "collapse";
         const label = t(this.lang, open ? "collapseAll" : "expandAll");
         if (all.getAttribute("aria-label") !== label) {
           all.setAttribute("aria-label", label);
@@ -1776,7 +1780,7 @@ class Controller {
   }
 
   toggleAll() {
-    this.setCollapsed(L.toggleAll(this.collapsed, this.shownGroups()));
+    this.setCollapsed(L.toggleAll(this.collapsed, this.shownGroups(), this.settings.accordion));
   }
 
   /** Every panel the user could see, with HA's visible order first. */
@@ -2123,6 +2127,12 @@ function patch(cls) {
     const c = ctrls.get(this);
     if (c?.dirty) {
       c.dirty = false;
+      return true;
+    }
+    // HA's own check ignores hass.themes, so colours adjusted for the previous theme (light / dark)
+    // would stay until an unrelated update (BUG-015). The palette is read again on the next render.
+    if (c?.pal && c.pal.themes !== this.hass?.themes) {
+      c.pal = null;
       return true;
     }
     return origShould.call(this, changed);

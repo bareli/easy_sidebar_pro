@@ -8,6 +8,10 @@ Styling, collapse settings and a bottom grid, for parity with Sidebar Organizer 
 - **Header and divider style** (#27): group headers plain, with a tinted background, or with a line above; the line beside grouped items can be hidden. Themes can restyle all of it with CSS variables (see the README).
 - **Collapse settings** (#28): "Groups start collapsed" (on every page load; folding is then not remembered), "One group open at a time" (opening a group folds the others), and an optional collapse / expand all button next to the sidebar title.
 - **Pinned icons at the bottom** (#29): drag items into the new "Pinned at the bottom" area of the editor to show them as a compact icon grid above Settings / Notifications, four per row. Names show as tooltips; in the icon-only sidebar they stack in the rail. Keyboard: arrow keys move through the grid (Down from the last row continues to Settings), Enter opens; in the editor Alt + Down from the last row pins an item. Screen readers hear each item's name and "Pinned". At most 20 pinned items.
+- With "One group open at a time" the collapse / expand all button only collapses (expanding all would open several groups); it is hidden while every group is folded.
+- Home Assistant's own "Edit sidebar" dialog: a new order there also re-sorts the pinned icons (they stay pinned), as it does for groups (#31).
+- Switching between light and dark (or another theme) with the page open updates the group colours right away (#30).
+- With the collapse / expand all button on, a Latin sidebar title in Hebrew is shortened at its end ("Home Assi..."), not its start (#32).
 - Layouts saved by earlier versions load unchanged, with the new options at their defaults. The server validates every new value (colour format, known options only, at most 20 pinned items).
 
 ## v0.2.1 (2026-10-01)

@@ -37,7 +37,8 @@ Hebrew and English, right-to-left aware.
   with a tinted background or with a line above, and the line beside grouped items shown or hidden.
 - **Collapse settings** (editor, **Display**): groups start collapsed on every page load; only one group
   open at a time; a collapse / expand all button next to the sidebar title (off by default, because it
-  shortens the title).
+  shortens the title). With "one group open at a time" the button only collapses, and is hidden while every
+  group is folded.
 - **Pinned icons at the bottom**: drag items into **Pinned at the bottom** in the editor. They appear as a
   compact grid of icons above Settings and Notifications (four per row; one column when the sidebar shows
   icons only). Hover or focus an icon for its name. With the keyboard, use the arrow keys inside the grid

@@ -132,7 +132,8 @@ edited in the in-sidebar editor, validated by `layout.py` and mirrored in `layou
   `grey`, drawn as `var(--<name>-color)`, so themes redefine them per mode) or `#rrggbb` (`#rgb` is
   expanded, output lowercase). Anything else is refused (`invalid_format`).
 - Contrast: the frontend resolves the colour and the sidebar background / text of the current theme
-  (re-read when `hass.themes` changes) and mixes the colour toward the theme's text colour only as far
+  (re-read when `hass.themes` changes; a theme or light / dark change re-renders the sidebar, which
+  HA's own sidebar does not do) and mixes the colour toward the theme's text colour only as far
   as needed: 4.5:1 for the name (on the tinted header background when used), 3:1 for icons and lines.
 - `settings.header`: `plain` | `tinted` (background = 14% of the group colour, or a neutral tint) |
   `line` (a line above each group, not above the first row). `settings.divider`: `line` | `none` (the
@@ -145,10 +146,13 @@ edited in the in-sidebar editor, validated by `layout.py` and mirrored in `layou
 - `start_collapsed`: on each page load every group starts folded; folding is kept in the page only (not
   written to the server, so devices do not fold each other). Turned on during a session, the current
   state is kept until the next load.
-- `accordion`: opening a group folds every other shown group.
+- `accordion`: opening a group folds every other shown group. "Expand all" would break that, so with
+  `accordion` the `toggle_all` button only collapses: it is shown while a group is open and hidden when
+  every group is folded.
 - `toggle_all`: a collapse all / expand all button next to the sidebar title (expanded sidebar only,
-  two or more groups). Off by default: it shortens the title. Collapse all when any group is open,
-  expand all otherwise; stored like a click (or page-only with `start_collapsed`).
+  two or more groups). Off by default: it shortens the title. The title takes its direction from its own
+  text (`unicode-bidi: plaintext`), so a Latin name in a Hebrew UI is cut at its end ("Home Assi...").
+  Collapse all when any group is open, expand all otherwise; stored like a click (or page-only with `start_collapsed`).
 
 ### 7.3 Pinned grid (#29)
 - `grid`: panels shown as icons at the top of HA's fixed (bottom) list, above Settings / Notifications /
@@ -163,7 +167,9 @@ edited in the in-sidebar editor, validated by `layout.py` and mirrored in `layou
   Screen readers: each pinned row keeps its name and gets `aria-describedby` "Pinned".
 - Editor: a "Pinned at the bottom" block, always last; drop panels into it like a group; a group dropped
   on it lands above it; at most 20 items (drops refused when full); Alt + Down from the last row pins.
-  Hidden pinned panels are not shown. HA's native `panelOrder` lists pinned panels last.
+  Hidden pinned panels are not shown. HA's native `panelOrder` lists pinned panels last. An order saved
+  in HA's Edit sidebar dialog re-sorts the pinned panels by their relative order there (like group
+  members); they stay pinned wherever HA lists them.
 
 ### 7.4 Sidebar Organizer options not taken
 - Sidebar background / scrollbar colours, width, text transform, custom theme per sidebar: HA themes
