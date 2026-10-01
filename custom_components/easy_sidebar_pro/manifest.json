@@ -1,0 +1,14 @@
+{
+  "domain": "easy_sidebar_pro",
+  "name": "Easy Sidebar Pro",
+  "codeowners": ["@bareli"],
+  "config_flow": true,
+  "dependencies": ["frontend", "http", "websocket_api"],
+  "documentation": "https://github.com/bareli/easy_sidebar_pro",
+  "integration_type": "service",
+  "iot_class": "calculated",
+  "issue_tracker": "https://github.com/bareli/easy_sidebar_pro/issues",
+  "requirements": [],
+  "single_config_entry": true,
+  "version": "0.1.0"
+}

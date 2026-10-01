@@ -1,0 +1,13 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Easy Sidebar Pro",
+        "description": "Adds collapsible groups to the sidebar. After adding, refresh the browser, then use the pencil next to the sidebar title to edit."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Easy Sidebar Pro is already set up."
+    }
+  }
+}
