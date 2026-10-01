@@ -24,3 +24,19 @@
     `pending` to null.
   - Background launcher tasks are killed at their time limit (default 30 min): start instances with
     the maximum limit.
+  - HA resolves the static path through the junction **at startup**: re-pointing an instance's
+    junction to another checkout needs an HA restart (until then the module URL 404s or serves the
+    old target).
+  - First login on a seeded instance may show HA's "approve new HTTP config" dialog with a countdown;
+    confirm it (or promote via WS) or the port reverts.
+  - Config entry reload: REST `POST /api/config/config_entries/entry/<id>/reload` (no WS command).
+  - Git Bash: prefix Windows Python with `MSYS_NO_PATHCONV=1` when an argument starts with `/api/...`;
+    set `PYTHONIOENCODING=utf-8` when piping Hebrew JSON between processes (it corrupted a stored
+    name once). A bare `python -` heredoc with no stdin hangs.
+  - Playwright helpers for this product live in `~/.claude/qa-playwright/espjs/lib.mjs` (login,
+    wait for HA's launch screen which swallows early clicks, `BASE_JS` to serve another checkout's
+    module over a running instance).
+  - Leak measurement: release `Runtime.queryObjects` object groups after each count, or the harness
+    itself retains the counted elements and inflates the numbers (it did, PERF-003).
+  - Dark theme in Playwright: `localStorage.selectedTheme = {"dark": true}` before load.
+  - Each HA state change re-renders `ha-sidebar` (updates = state changes).
