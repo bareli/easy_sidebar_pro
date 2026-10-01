@@ -63,6 +63,11 @@ const STRINGS = {
     resetAsk: "Delete your layout and go back to the default layout?",
     resetOk: "Delete my layout",
     resetDone: "You are back on the default layout.",
+    resetPlain: "Remove groups and custom order",
+    resetPlainAsk: "Remove all your groups and go back to Home Assistant's own order? Hidden panels stay hidden.",
+    resetPlainOk: "Remove",
+    forkedByHa: "Your new order is saved as your own layout. It no longer follows the default layout.",
+    undo: "Undo",
     forEveryone: "For everyone",
     setDefault: "Set as default for everyone",
     setDefaultAsk: "This replaces the sidebar of every user who has not customised their own.",
@@ -108,6 +113,11 @@ const STRINGS = {
     resetAsk: "למחוק את הפריסה שלכם ולחזור לפריסת ברירת המחדל?",
     resetOk: "מחיקת הפריסה שלי",
     resetDone: "חזרתם לפריסת ברירת המחדל.",
+    resetPlain: "הסרת הקבוצות והסדר המותאם",
+    resetPlainAsk: "להסיר את כל הקבוצות ולחזור לסדר של Home Assistant? פריטים מוסתרים יישארו מוסתרים.",
+    resetPlainOk: "הסרה",
+    forkedByHa: "הסדר החדש נשמר כפריסה שלכם. היא כבר לא עוקבת אחרי פריסת ברירת המחדל.",
+    undo: "ביטול",
     forEveryone: "לכל המשתמשים",
     setDefault: "קביעה כברירת מחדל לכולם",
     setDefaultAsk: "הפעולה תחליף את סרגל הצד של כל משתמש שלא שינה את שלו.",
@@ -541,6 +551,15 @@ class EspEditor extends HTMLElement {
     if (this.own && this.hasDefault && !this.sameAsDefault)
       footer.append(
         h("div", { class: "footer-section" }, action("reset", t(lang, "reset"), t(lang, "resetAsk"), t(lang, "resetOk"), () => this.actions.reset(), true)),
+      );
+    // Without a default there is nothing to reset to but Home Assistant's own sidebar.
+    if (this.own && !this.hasDefault)
+      footer.append(
+        h(
+          "div",
+          { class: "footer-section" },
+          action("plain", t(lang, "resetPlain"), t(lang, "resetPlainAsk"), t(lang, "resetPlainOk"), () => this.actions.resetPlain(), true),
+        ),
       );
     if (this.isAdmin)
       footer.append(
@@ -1039,7 +1058,11 @@ class Controller {
     this.adoptTimer = setTimeout(() => {
       if (this.nativeSig !== sig || this.editing) return;
       const next = L.adoptOrder(this.serverLayout, order);
-      if (next) this.hass.callWS({ type: `${DOMAIN}/save`, layout: next }).catch(() => {});
+      if (!next) return;
+      const forks = !this.data?.own && !!this.data?.default;
+      this.hass
+        .callWS({ type: `${DOMAIN}/save`, layout: next })
+        .then(() => forks && this.notifyForked(), () => {});
     }, Math.random() * ADOPT_SPREAD_MS);
   }
 
@@ -1350,6 +1373,17 @@ class Controller {
           e.set({ confirming: null, error: this.failText(err) });
         }
       },
+      // No default: drop the layout and HA's custom order (HA sorts by itself again); hidden panels stay.
+      resetPlain: async () => {
+        const e = ed();
+        try {
+          await this.hass.callWS({ type: `${DOMAIN}/reset` });
+          await this.writePlainNative();
+          this.stopEdit();
+        } catch (err) {
+          e.set({ confirming: null, error: this.failText(err) });
+        }
+      },
       setDefault: async () => {
         const e = ed();
         if (e.focusInvalidName()) return;
@@ -1387,6 +1421,42 @@ class Controller {
     // The subscription echoes this write back: it is ours, not a change to adopt.
     this.writtenSig = JSON.stringify(value.panelOrder);
     await this.hass.callWS({ type: "frontend/set_user_data", key: "sidebar", value });
+  }
+
+  /** HA's own sorting again: empty panelOrder, hidden panels and other keys untouched. */
+  async writePlainNative() {
+    const current = (await this.hass.callWS({ type: "frontend/get_user_data", key: "sidebar" }))?.value ?? {};
+    this.writtenSig = JSON.stringify([]);
+    await this.hass.callWS({ type: "frontend/set_user_data", key: "sidebar", value: { ...current, panelOrder: [] } });
+  }
+
+  /**
+   * HA's own dialog reordered the sidebar of a user who follows the default, and adopting it made the
+   * layout theirs (UX-001 / UX-002). Say so through HA's own toast, with Undo back to the default.
+   */
+  notifyForked() {
+    const lang = this.lang;
+    this.sb.dispatchEvent(
+      new CustomEvent("hass-notification", {
+        bubbles: true,
+        composed: true,
+        detail: { message: t(lang, "forkedByHa"), duration: 10000, dismissable: true, action: { text: t(lang, "undo"), action: () => this.undoFork() } },
+      }),
+    );
+  }
+
+  async undoFork() {
+    try {
+      await this.hass.callWS({ type: `${DOMAIN}/reset` });
+      const { paths, hidden, defaultInvisible } = this.allPanels();
+      const tree = L.buildTree(this.data?.default, paths);
+      const current = (await this.hass.callWS({ type: "frontend/get_user_data", key: "sidebar" }))?.value ?? {};
+      const value = L.nativeSidebar(current, tree, new Set(paths), hidden, defaultInvisible);
+      this.writtenSig = JSON.stringify(value.panelOrder);
+      await this.hass.callWS({ type: "frontend/set_user_data", key: "sidebar", value });
+    } catch (_err) {
+      // Nothing to undo on a failed connection; the toast is gone and the layout stays as saved.
+    }
   }
 
   /** Only HA's hidden list; our layout is not saved, so the user stays on the default. */

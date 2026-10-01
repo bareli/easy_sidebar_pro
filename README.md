@@ -26,7 +26,10 @@ Hebrew and English, right-to-left aware.
 - **Works with Home Assistant's own sidebar settings**: order and hidden panels are written to Home
   Assistant's own sidebar settings too. Its long-press "Edit sidebar" dialog keeps working: hiding
   works as before, and a new order saved there is applied to your layout (groups stay; panels inside
-  each group follow the new order).
+  each group follow the new order). If you were following the admin default, a short message tells you the
+  layout is now your own, with Undo.
+- **Start over**: without an admin default, "Remove groups and custom order" in the editor brings back
+  Home Assistant's own sidebar (hidden panels stay hidden).
 - **No flicker**: groups are drawn as part of Home Assistant's own sidebar, not patched in afterwards.
 - **Touch and keyboard**: drag with a finger or a mouse. With the keyboard, focus a handle and press
   Alt + Up / Down; a screen reader hears where the row landed.
