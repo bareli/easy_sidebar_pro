@@ -38,7 +38,18 @@
     module over a running instance).
   - Leak measurement: release `Runtime.queryObjects` object groups after each count, or the harness
     itself retains the counted elements and inflates the numbers (it did, PERF-003).
-  - Dark theme in Playwright: `localStorage.selectedTheme = {"dark": true}` before load.
+  - Dark theme in Playwright: `localStorage.selectedTheme = {"dark": true}` before load. **But** once a
+    theme is chosen in the page (profile picker, or a `settheme` event), HA 2026.9 stores it in the
+    user's server data (`frontend/set_user_data` key `theme`), which then wins over localStorage on every
+    load: set `{"dark": true}` there (WS) instead, or the "dark" run silently renders light (v0.3 cycle).
+  - The sidebar does NOT re-render on a theme change alone (`ha-sidebar.shouldUpdate` ignores
+    `hass.themes`); on a quiet dev instance it may not re-render for minutes. Anything computed in our
+    render from the theme is stale until then (BUG-015). Navigation forces a re-render.
+  - HA's Edit sidebar dialog (2026.9) can be driven without drag: hold action on `.menu`
+    (`action` event, `{action: "hold"}`), then `value-changed` `{order, hidden}` on its
+    `ha-items-display-editor`, then `dialog._save()`. Setting `_order` / `_hidden` directly does nothing.
+  - Only one HA version per port: to check an older HA on your own port, copy that version's config dir,
+    change `server_port` in both `configuration.yaml` and `.storage/http`, and junction the code under test.
   - Each HA state change re-renders `ha-sidebar` (updates = state changes).
   - Synthetic touch: a tap sent right after a fast CDP touch swipe is swallowed by Chromium fling handling; end swipes at rest (a few moves at the final point) before tapping.
   - Compatibility instances (2026-10-01): venvs `venv-<ha version>` built with uv from `extras.txt`, then
