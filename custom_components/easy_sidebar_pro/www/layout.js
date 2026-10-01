@@ -316,6 +316,21 @@ export function editChanged(baseTree, tree, baseHidden, hidden) {
   return false;
 }
 
+/** What Done would save: "none", "hidden-only" (only the hide/show set differs) or "structure" (order, groups, names, icons). */
+export function editKind(baseTree, tree, baseHidden, hidden) {
+  if (JSON.stringify(toLayout(baseTree)) !== JSON.stringify(toLayout(tree))) return "structure";
+  return editChanged(baseTree, tree, baseHidden, hidden) ? "hidden-only" : "none";
+}
+
+/** HA's `sidebar` user data with only the hidden list replaced (panelOrder and other keys kept). */
+export function nativeHidden(current, known, hidden, invisible) {
+  const hiddenPanels = [...hidden].filter((p) => known.has(p) && !invisible.has(p));
+  const keep = (Array.isArray(current?.hiddenPanels) ? current.hiddenPanels : []).filter(
+    (p) => typeof p === "string" && !known.has(p) && !hiddenPanels.includes(p),
+  );
+  return { ...current, hiddenPanels: [...hiddenPanels, ...keep] };
+}
+
 /** `base`, or `base 2`, `base 3`... when a group already has that name. */
 export function uniqueName(tree, base) {
   const used = new Set(tree.filter((n) => n.type === "group").map((n) => n.name));
