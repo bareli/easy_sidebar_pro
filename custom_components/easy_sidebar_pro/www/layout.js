@@ -266,3 +266,69 @@ export function nativeSidebar(current, tree, known, hidden, invisible) {
     hiddenPanels: [...hiddenPanels, ...keep(current?.hiddenPanels, hiddenPanels)],
   };
 }
+
+/**
+ * HA's native `panelOrder` changed outside the editor (HA's own Edit sidebar dialog): the layout
+ * re-sorted to follow it, groups kept. Top-level entries follow HA's relative order (a group ranks
+ * by its first member in HA's order); members inside each group follow it too. Entries HA does not
+ * list (a stopped add-on, a group with no listed member) keep their slots. Returns null when the
+ * layout already agrees with `order`, so applying our own write back is a no-op.
+ */
+export function adoptOrder(layout, order) {
+  if (!layout || !Array.isArray(order)) return null;
+  const rank = new Map();
+  order.forEach((p, i) => {
+    if (typeof p === "string" && !rank.has(p)) rank.set(p, i);
+  });
+  const resort = (items, rankOf) => {
+    const slots = [];
+    const ranked = [];
+    items.forEach((item, i) => {
+      const r = rankOf(item);
+      if (r === undefined) return;
+      slots.push(i);
+      ranked.push([r, item]);
+    });
+    ranked.sort((a, b) => a[0] - b[0]);
+    const out = [...items];
+    slots.forEach((slot, k) => (out[slot] = ranked[k][1]));
+    return out;
+  };
+  const groups = {};
+  for (const [id, g] of Object.entries(layout.groups ?? {}))
+    groups[id] = { ...g, panels: resort(Array.isArray(g?.panels) ? g.panels : [], (p) => rank.get(p)) };
+  const groupRank = (id) => {
+    const ranks = (groups[id]?.panels ?? []).map((p) => rank.get(p)).filter((r) => r !== undefined);
+    return ranks.length ? Math.min(...ranks) : undefined;
+  };
+  const order2 = resort(Array.isArray(layout.order) ? layout.order : [], (e) =>
+    typeof e !== "string" ? undefined : e.startsWith(GROUP_PREFIX) ? groupRank(e.slice(GROUP_PREFIX.length)) : rank.get(e),
+  );
+  const next = { ...layout, order: order2, groups };
+  return JSON.stringify(next) === JSON.stringify(layout) ? null : next;
+}
+
+/** Whether the editor holds anything to save: the layout or the hidden set differ from when it opened. */
+export function editChanged(baseTree, tree, baseHidden, hidden) {
+  if (JSON.stringify(toLayout(baseTree)) !== JSON.stringify(toLayout(tree))) return true;
+  if (baseHidden.size !== hidden.size) return true;
+  for (const p of hidden) if (!baseHidden.has(p)) return true;
+  return false;
+}
+
+/** `base`, or `base 2`, `base 3`... when a group already has that name. */
+export function uniqueName(tree, base) {
+  const used = new Set(tree.filter((n) => n.type === "group").map((n) => n.name));
+  if (!used.has(base)) return base;
+  for (let i = 2; ; i++) if (!used.has(`${base} ${i}`)) return `${base} ${i}`;
+}
+
+// home-assistant-js-websocket rejects with a bare number when the socket fails
+// (1 cannot connect, 2 invalid auth, 3 connection lost, 4 host required, ...).
+/** Which localized message a failed write shows: "connection", "invalid" (server validation) or "other". */
+export function saveErrorKind(err) {
+  if (typeof err === "number") return "connection";
+  if (err?.code === "invalid_format") return "invalid";
+  if (typeof err?.code === "number" || err instanceof TypeError) return "connection";
+  return "other";
+}

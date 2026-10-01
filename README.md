@@ -15,13 +15,17 @@ Hebrew and English, right-to-left aware.
   - Drop between rows to move. Whole groups move by their handle.
   - The eye button hides or shows a panel (the same hidden list Home Assistant uses).
   - Group icon and name are edited on the group row; "ungroup" puts its panels back in place.
-  - **Done** saves, **Cancel** throws the changes away.
+  - **Done** saves (with nothing changed it just closes), **Cancel** throws the changes away.
 - **Your layout follows you**: it is stored in Home Assistant per user, not in the browser, so it is
   the same on every computer, tablet and in the companion app.
 - **Admin default**: an admin can press "Set as default for everyone". Users who never edited their
-  sidebar get that layout; anyone can go back to it with "Reset to the default layout".
+  sidebar get that layout; anyone can go back to it with "Reset to the default layout". These actions
+  ask for confirmation inside the editor first. A user on the default who saves a change is told once
+  that the layout becomes their own.
 - **Works with Home Assistant's own sidebar settings**: order and hidden panels are written to Home
-  Assistant's own sidebar settings too. Its long-press "Edit sidebar" dialog keeps working.
+  Assistant's own sidebar settings too. Its long-press "Edit sidebar" dialog keeps working: hiding
+  works as before, and a new order saved there is applied to your layout (groups stay; panels inside
+  each group follow the new order).
 - **No flicker**: groups are drawn as part of Home Assistant's own sidebar, not patched in afterwards.
 - **Touch and keyboard**: drag with a finger or a mouse. With the keyboard, focus a handle and press
   Alt + Up / Down; a screen reader hears where the row landed.

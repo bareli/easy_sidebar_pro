@@ -27,10 +27,13 @@ const PANEL_ICONS = {
 const FIXED_PANELS = ["profile", "config", "notfound"];
 const DEFAULT_ICON = "mdi:folder-outline";
 const HOLD_MS = 1500;
+const GHOST_INSET = 24;
+const GHOST_GAP = 28;
+const ADOPT_SPREAD_MS = 1000;
 const SUGGESTED_ICONS = [
   "mdi:home", "mdi:sofa", "mdi:bed", "mdi:silverware-fork-knife", "mdi:lightbulb-group", "mdi:thermometer",
   "mdi:shield-home", "mdi:camera", "mdi:chart-line", "mdi:calendar-month", "mdi:tools", "mdi:cog",
-  "mdi:star", "mdi:account-group", "mdi:car", "mdi:flower",
+  "mdi:star", "mdi:account-group", "mdi:car", "mdi:flower", "mdi:television", "mdi:teddy-bear", "mdi:lightbulb-on", "mdi:water",
 ];
 const LIST_KEYS = new Set(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Home", "End", "PageUp", "PageDown", "Enter", " "]);
 
@@ -49,14 +52,30 @@ const STRINGS = {
     ungroup: "Ungroup {name}",
     hide: "Hide {name}",
     show: "Show {name}",
+    alwaysShown: "{name} (default) is always shown",
     drag: "Move {name}. Drag, or Alt + arrow keys.",
     items: "{n} items",
+    items1: "1 item",
     empty: "Drop items here",
+    mergeLabel: "New group with {name}",
     reset: "Reset to the default layout",
+    resetAsk: "Delete your layout and go back to the default layout?",
+    resetOk: "Delete my layout",
+    resetDone: "You are back on the default layout.",
+    forEveryone: "For everyone",
     setDefault: "Set as default for everyone",
+    setDefaultAsk: "This replaces the sidebar of every user who has not customised their own.",
+    setDefaultOk: "Set for everyone",
+    setDefaultDone: "The default layout is set for everyone.",
     clearDefault: "Remove the default layout",
-    onDefault: "You are using the default layout. Saving makes it yours.",
-    saveFailed: "Could not save: {error}",
+    clearDefaultAsk: "Users who have not customised their sidebar go back to Home Assistant's order.",
+    clearDefaultOk: "Remove",
+    clearDefaultDone: "The default layout was removed.",
+    onDefault: "You are using the default layout.",
+    forkNote: "Saving makes this layout yours: it will no longer follow the default layout. You can go back to it later. Press Done again to save.",
+    saveFailed: "Could not save. Try again.",
+    saveFailedConnection: "Could not save. Check the connection and try again.",
+    saveFailedInvalid: "Could not save: a group name or icon is not valid.",
     movedTop: "{name}: position {pos}",
     movedGroup: "{name}: in {group}, position {pos}",
     grouped: "Group created with {a} and {b}",
@@ -64,8 +83,8 @@ const STRINGS = {
     hint: "Drag a row onto another row to make a group.",
   },
   he: {
-    edit: "עריכת התפריט",
-    editing: "עריכת התפריט",
+    edit: "עריכת סרגל הצד",
+    editing: "עריכת סרגל הצד",
     done: "סיום",
     cancel: "ביטול",
     addGroup: "הוספת קבוצה",
@@ -77,17 +96,33 @@ const STRINGS = {
     ungroup: "פירוק הקבוצה {name}",
     hide: "הסתרת {name}",
     show: "הצגת {name}",
+    alwaysShown: "{name} (ברירת מחדל) מוצג תמיד",
     drag: "הזזת {name}. גררו, או Alt + חצים.",
     items: "{n} פריטים",
+    items1: "פריט אחד",
     empty: "גררו לכאן פריטים",
+    mergeLabel: "קבוצה חדשה עם {name}",
     reset: "חזרה לפריסת ברירת המחדל",
+    resetAsk: "למחוק את הפריסה שלכם ולחזור לפריסת ברירת המחדל?",
+    resetOk: "מחיקת הפריסה שלי",
+    resetDone: "חזרתם לפריסת ברירת המחדל.",
+    forEveryone: "לכל המשתמשים",
     setDefault: "קביעה כברירת מחדל לכולם",
+    setDefaultAsk: "הפעולה תחליף את סרגל הצד של כל משתמש שלא שינה את שלו.",
+    setDefaultOk: "קביעה לכולם",
+    setDefaultDone: "פריסת ברירת המחדל נקבעה לכולם.",
     clearDefault: "ביטול פריסת ברירת המחדל",
-    onDefault: "זו פריסת ברירת המחדל. שמירה תהפוך אותה לשלכם.",
-    saveFailed: "השמירה נכשלה: {error}",
+    clearDefaultAsk: "משתמשים שלא שינו את סרגל הצד שלהם יחזרו לסדר של Home Assistant.",
+    clearDefaultOk: "הסרה",
+    clearDefaultDone: "פריסת ברירת המחדל הוסרה.",
+    onDefault: "זו פריסת ברירת המחדל.",
+    forkNote: "שמירה תהפוך את הפריסה לשלכם, והיא לא תעקוב יותר אחרי פריסת ברירת המחדל. אפשר לחזור אליה בהמשך. לחצו שוב על סיום כדי לשמור.",
+    saveFailed: "לא ניתן לשמור. נסו שוב.",
+    saveFailedConnection: "לא ניתן לשמור. בדקו את החיבור ונסו שוב.",
+    saveFailedInvalid: "לא ניתן לשמור: שם או סמל של קבוצה אינם תקינים.",
     movedTop: "{name}: מקום {pos}",
     movedGroup: "{name}: בקבוצה {group}, מקום {pos}",
-    grouped: "נוצרה קבוצה עם {a} ו{b}",
+    grouped: "נוצרה קבוצה עם {a} ועם {b}",
     nameRequired: "צריך שם לקבוצה",
     hint: "גררו שורה אל שורה אחרת כדי ליצור קבוצה.",
   },
@@ -128,7 +163,8 @@ function svg(path, cls = "") {
   return s;
 }
 
-function iconEl(icon) {
+function iconEl(icon, path = null) {
+  if (path) return h("ha-svg-icon", { class: "icon", ".path": path });
   if (!icon) return h("span", { class: "icon" });
   return h("ha-icon", { class: "icon", ".icon": icon });
 }
@@ -212,7 +248,7 @@ class EspGroup extends HTMLElement {
   update(row, lang, iconOnly, rtl) {
     this._icon.icon = row.icon || DEFAULT_ICON;
     this._name.textContent = row.name;
-    const count = t(lang, "items", { n: row.count });
+    const count = row.count === 1 ? t(lang, "items1") : t(lang, "items", { n: row.count });
     this._count.textContent = row.collapsed ? String(row.count) : "";
     this.toggleAttribute("collapsed", row.collapsed);
     this.toggleAttribute("selected", row.collapsed && row.selected);
@@ -266,13 +302,18 @@ button { font: inherit; color: inherit; }
   touch-action: none; color: var(--secondary-text-color); border-radius: 6px; }
 .handle svg { width: 20px; height: 20px; fill: currentColor; }
 .icon { --mdc-icon-size: 22px; width: 22px; height: 22px; flex: none; color: var(--sidebar-icon-color, var(--secondary-text-color)); }
-.title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+:host([rtl]) .title { text-align: right; }
+.merge-label { display: none; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: var(--ha-font-weight-medium, 500);
+  color: var(--esp-action-color); }
+.row.merge .title, .row.merge .eye { display: none; }
+.row.merge .merge-label { display: block; }
 .row.hidden .title { color: var(--secondary-text-color); }
 .row.hidden .icon { opacity: 0.45; }
 .icon-btn { flex: none; width: 36px; height: 36px; display: grid; place-items: center; border: none; background: none; border-radius: 50%; cursor: pointer; color: var(--secondary-text-color); }
 .icon-btn svg { width: 20px; height: 20px; fill: currentColor; }
-.icon-btn[disabled] { opacity: 0.3; cursor: default; }
-.icon-btn:not([disabled]):hover { background: rgba(127,127,127,0.15); }
+.icon-btn[disabled], .icon-btn[aria-disabled="true"] { opacity: 0.3; cursor: default; }
+.icon-btn:not([disabled]):not([aria-disabled="true"]):hover { background: rgba(127,127,127,0.15); }
 .name-input { flex: 1; min-width: 0; font: inherit; font-weight: var(--ha-font-weight-medium, 500); color: inherit; background: transparent;
   border: 1px solid transparent; border-bottom-color: var(--secondary-text-color); border-radius: 6px 6px 0 0; padding: 6px; }
 .name-input:hover { border-color: var(--divider-color); border-bottom-color: var(--primary-text-color); }
@@ -288,10 +329,17 @@ button { font: inherit; color: inherit; }
 .drop-before::before { top: -2px; }
 .drop-after::after { bottom: -2px; }
 .drop-into { outline: 2px solid var(--primary-color); outline-offset: -2px; background: rgba(var(--rgb-primary-color, 3,169,244), 0.12); }
-.ghost { position: fixed; translate: 12px 0; z-index: 1000; pointer-events: none; opacity: 0.92; background: var(--card-background-color, #fff);
+.ghost { position: fixed; box-sizing: border-box; z-index: 1000; pointer-events: none; opacity: 0.92; background: var(--card-background-color, #fff);
   box-shadow: 0 6px 18px rgba(0,0,0,0.25); border-radius: 8px; }
 .footer { display: flex; flex-direction: column; gap: 4px; padding: 8px 12px 16px; border-top: 1px solid var(--divider-color); margin-top: 6px; }
 .link { border: none; background: none; text-align: start; padding: 8px 0; color: var(--esp-action-color); cursor: pointer; min-height: 36px; }
+.notice { font-size: var(--ha-font-size-s, 12px); line-height: 1.4; padding: 6px 8px; border-inline-start: 3px solid var(--esp-action-color);
+  background: var(--secondary-background-color, rgba(127,127,127,0.08)); border-radius: 4px; }
+.footer-section { display: flex; flex-direction: column; gap: 4px; }
+.footer-section + .footer-section { border-top: 1px solid var(--divider-color); margin-top: 6px; padding-top: 8px; }
+.footer-heading { color: var(--secondary-text-color); font-size: var(--ha-font-size-s, 12px); font-weight: var(--ha-font-weight-medium, 500); }
+.confirm { display: flex; flex-direction: column; gap: 8px; padding: 8px; border: 1px solid var(--divider-color); border-radius: 8px; line-height: 1.4; }
+.btn.danger { background: var(--esp-error-color); border-color: var(--esp-error-color); color: #fff; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 `;
 
@@ -316,10 +364,21 @@ class EspEditor extends HTMLElement {
     });
   }
 
-  /** opts: { tree, hiddenSet:Set, info:Map(path→{title,icon}), lockedVisible:Set, lang, rtl, isAdmin, own, hasDefault, actions } */
+  connectedCallback() {
+    // The editor replaces the rows inside HA's panel list (role=list), which may own only list items.
+    this.setAttribute("role", "listitem");
+  }
+
+  /** opts: { tree, hiddenSet:Set, info:Map(path→{title,icon,iconPath}), lockedVisible:Set, lang, isAdmin, own, hasDefault, sameAsDefault, actions } */
   open(opts) {
     Object.assign(this, opts);
     this.error = "";
+    // One inline confirmation at a time ("reset" | "setdef" | "cleardef"), a result message, and the
+    // one-time note shown before a user on the default saves a change.
+    this.confirming = null;
+    this.status = "";
+    this.notice = "";
+    this.forkNoted = false;
     this.focusKey = null;
     this.iconEditing = null;
     // Group id -> what the user left in a name field that is not a valid name (shown with its error).
@@ -397,7 +456,7 @@ class EspEditor extends HTMLElement {
   patchRow(path) {
     const row = this._q(`.row[data-key="${CSS.escape(L.panelKey(path))}"]`);
     const eye = row?.querySelector(".eye");
-    if (!eye) return;
+    if (!eye || this.lockedVisible.has(path)) return;
     const hidden = this.hiddenSet.has(path);
     const text = t(this.lang, hidden ? "show" : "hide", { name: this.info.get(path)?.title ?? path });
     row.classList.toggle("hidden", hidden);
@@ -424,6 +483,9 @@ class EspEditor extends HTMLElement {
   render() {
     const lang = this.lang;
     const root = this.shadowRoot;
+    // Titles take their own direction (dir=auto, so a long English title shows its start) but keep
+    // the page's alignment. HA sets the page direction on <html dir>.
+    this.toggleAttribute("rtl", (document.documentElement.dir || getComputedStyle(document.documentElement).direction) === "rtl");
     const active = root.activeElement;
     const focusKey = this.focusKey ?? active?.dataset?.focusKey ?? null;
     for (const id of [...this.nameErrors.keys()]) if (!this.tree.some((n) => n.type === "group" && n.id === id)) this.nameErrors.delete(id);
@@ -440,6 +502,8 @@ class EspEditor extends HTMLElement {
       ),
       !this.own && this.hasDefault ? h("div", { class: "note" }, t(lang, "onDefault")) : null,
       h("div", { class: "note" }, t(lang, "hint")),
+      this.notice ? h("div", { class: "notice", role: "alert" }, this.notice) : null,
+      this.status ? h("div", { class: "notice", role: "status" }, this.status) : null,
       this.error ? h("div", { class: "error", role: "alert" }, this.error) : null,
     );
 
@@ -455,14 +519,39 @@ class EspEditor extends HTMLElement {
       else if (!node.missing) list.append(h("div", { class: "top", role: "listitem" }, this.panelRow(node, null)));
     }
 
+    // Footer actions commit at once and Cancel cannot undo them: each asks first, inline.
+    const action = (kind, label, ask, ok, run, danger) => {
+      if (this.confirming !== kind)
+        return h("button", { class: "link", type: "button", "data-focus-key": kind, onclick: () => this.set({ confirming: kind, status: "" }, `no:${kind}`) }, label);
+      return h(
+        "div",
+        { class: "confirm", role: "group", "aria-labelledby": `ask-${kind}` },
+        h("div", { id: `ask-${kind}` }, ask),
+        h(
+          "div",
+          { class: "bar-buttons" },
+          h("button", { class: `btn ${danger ? "danger" : "primary"}`, type: "button", "data-focus-key": `ok:${kind}`, onclick: run }, ok),
+          h("button", { class: "btn", type: "button", "data-focus-key": `no:${kind}`, onclick: () => this.set({ confirming: null }, kind) }, t(lang, "cancel")),
+        ),
+      );
+    };
     const footer = h("div", { class: "footer" });
-    if (this.own && this.hasDefault)
-      footer.append(h("button", { class: "link", type: "button", "data-focus-key": "reset", onclick: () => this.actions.reset() }, t(lang, "reset")));
-    if (this.isAdmin) {
-      footer.append(h("button", { class: "link", type: "button", "data-focus-key": "setdef", onclick: () => this.actions.setDefault() }, t(lang, "setDefault")));
-      if (this.hasDefault)
-        footer.append(h("button", { class: "link", type: "button", "data-focus-key": "cleardef", onclick: () => this.actions.clearDefault() }, t(lang, "clearDefault")));
-    }
+    if (this.own && this.hasDefault && !this.sameAsDefault)
+      footer.append(
+        h("div", { class: "footer-section" }, action("reset", t(lang, "reset"), t(lang, "resetAsk"), t(lang, "resetOk"), () => this.actions.reset(), true)),
+      );
+    if (this.isAdmin)
+      footer.append(
+        h(
+          "div",
+          { class: "footer-section", role: "group", "aria-labelledby": "esp-everyone" },
+          h("div", { class: "footer-heading", id: "esp-everyone" }, t(lang, "forEveryone")),
+          action("setdef", t(lang, "setDefault"), t(lang, "setDefaultAsk"), t(lang, "setDefaultOk"), () => this.actions.setDefault()),
+          this.hasDefault
+            ? action("cleardef", t(lang, "clearDefault"), t(lang, "clearDefaultAsk"), t(lang, "clearDefaultOk"), () => this.actions.clearDefault(), true)
+            : null,
+        ),
+      );
 
     this._content.replaceChildren(bar, add, list, footer.childElementCount ? footer : "");
 
@@ -601,23 +690,28 @@ class EspEditor extends HTMLElement {
     const info = this.info.get(node.path) ?? { title: node.path, icon: null };
     const hidden = this.hiddenSet.has(node.path);
     const locked = this.lockedVisible.has(node.path);
+    // The default dashboard cannot be hidden (HA rule): the eye stays focusable and says why.
+    const eyeLabel = locked ? t(lang, "alwaysShown", { name: info.title }) : t(lang, hidden ? "show" : "hide", { name: info.title });
     return h(
       "div",
       { class: `row${hidden ? " hidden" : ""}`, "data-key": key, "data-group": groupId ?? "" },
       this.handle(key, info.title),
-      iconEl(info.icon),
-      h("span", { class: "title" }, info.title),
+      iconEl(info.icon, info.iconPath),
+      h("span", { class: "title", dir: "auto" }, info.title),
+      h("span", { class: "merge-label", "aria-hidden": "true" }),
       h(
         "button",
         {
           class: "icon-btn eye",
           type: "button",
-          "aria-pressed": String(hidden),
-          "aria-label": t(lang, hidden ? "show" : "hide", { name: info.title }),
-          title: t(lang, hidden ? "show" : "hide", { name: info.title }),
-          disabled: locked,
+          "aria-pressed": locked ? null : String(hidden),
+          "aria-label": eyeLabel,
+          title: eyeLabel,
+          "aria-disabled": locked ? "true" : null,
           "data-focus-key": `eye:${node.path}`,
-          onclick: () => this.actions.toggleHidden(node.path),
+          onclick: () => {
+            if (!locked) this.actions.toggleHidden(node.path);
+          },
         },
         svg(hidden ? ICONS.eyeOff : ICONS.eye),
       ),
@@ -666,20 +760,25 @@ class EspEditor extends HTMLElement {
     if (!d.started) {
       if (Math.hypot(e.clientX - d.startX, e.clientY - d.startY) < 5) return;
       d.started = true;
+      // The ghost sits beside the pointer, not under it: the row being dropped onto stays visible.
+      // It is indented toward the inline end and never wider than the row, so it stays in the sidebar.
       const rect = d.block.getBoundingClientRect();
-      d.offsetY = d.startY - rect.top;
+      const inset = Math.min(GHOST_INSET, rect.width / 4);
+      const rtl = getComputedStyle(this).direction === "rtl";
       d.ghost = d.block.cloneNode(true);
       d.ghost.classList.add("ghost");
-      d.ghost.style.width = `${rect.width}px`;
-      d.ghost.style.left = `${rect.left}px`;
+      d.ghost.style.width = `${rect.width - inset}px`;
+      d.ghost.style.left = `${rtl ? rect.left : rect.left + inset}px`;
       this.shadowRoot.append(d.ghost);
+      d.ghostHeight = d.ghost.getBoundingClientRect().height;
       d.block.classList.add("dragging");
       d.scroller = this._scroller();
       this._autoScroll();
     }
     d.lastY = e.clientY;
     d.lastX = e.clientX;
-    d.ghost.style.top = `${e.clientY - d.offsetY}px`;
+    const below = e.clientY + GHOST_GAP;
+    d.ghost.style.top = `${below + d.ghostHeight > window.innerHeight ? e.clientY - GHOST_GAP - d.ghostHeight : below}px`;
     this._updateTarget(e.clientX, e.clientY);
   }
 
@@ -734,12 +833,20 @@ class EspEditor extends HTMLElement {
     let mark = row;
     if (dragGroup && (inGroup || targetGroup)) mark = row.closest(".group") ?? row;
     mark.classList.add(zone === "before" ? "drop-before" : zone === "after" ? "drop-after" : "drop-into");
+    if (zone === "merge") {
+      // Say what a release here does, on the target row itself.
+      const label = row.querySelector(".merge-label");
+      if (label) {
+        label.replaceChildren(t(this.lang, "mergeLabel", { name: "" }), h("bdi", {}, this.name(targetKey)));
+        row.classList.add("merge");
+      }
+    }
     d.target = { key: targetKey, zone };
   }
 
   _clearMarks() {
-    for (const el of this.shadowRoot.querySelectorAll(".drop-before, .drop-after, .drop-into"))
-      el.classList.remove("drop-before", "drop-after", "drop-into");
+    for (const el of this.shadowRoot.querySelectorAll(".drop-before, .drop-after, .drop-into, .merge"))
+      el.classList.remove("drop-before", "drop-after", "drop-into", "merge");
   }
 
   _scroller() {
@@ -819,6 +926,11 @@ class Controller {
     this.editor = null;
     this.collapseTimer = null;
     this.failed = false;
+    // HA's native sidebar order (frontend user data), followed when it changes outside our editor.
+    this.nativeUnsub = null;
+    this.nativeSubscribing = false;
+    this.nativeSig = undefined;
+    this.writtenSig = null;
     // Until our layout arrives, show an empty list rather than flashing the flat one.
     this.holdUntil = Date.now() + HOLD_MS;
     this.holdTimer = setTimeout(() => this.refresh(), HOLD_MS);
@@ -837,6 +949,7 @@ class Controller {
   }
 
   connect() {
+    this.connectNative();
     if (this.unsub || this.subscribing || !this.hass?.connection) return;
     this.subscribing = true;
     this.hass.connection
@@ -854,16 +967,74 @@ class Controller {
       );
   }
 
+  /** HA's own sidebar user data, through HA's public websocket command. Without it nothing is adopted. */
+  connectNative() {
+    if (this.nativeUnsub || this.nativeSubscribing || !this.hass?.connection) return;
+    this.nativeSubscribing = true;
+    this.hass.connection
+      .subscribeMessage((msg) => this.onNative(msg?.value), { type: "frontend/subscribe_user_data", key: "sidebar" })
+      .then(
+        (unsub) => {
+          this.nativeUnsub = unsub;
+          this.nativeSubscribing = false;
+        },
+        () => {
+          this.nativeSubscribing = false;
+        },
+      );
+  }
+
   disconnect() {
     this.unsub?.();
     this.unsub = null;
+    this.nativeUnsub?.();
+    this.nativeUnsub = null;
+    this.nativeSig = undefined;
+    clearTimeout(this.adoptTimer);
   }
 
   onData(data) {
     clearTimeout(this.holdTimer);
     this.data = data;
-    if (this.editor && this.editing) this.editor.set({ isAdmin: data.is_admin, own: data.own, hasDefault: !!data.default });
+    this.serverLayout = data.layout;
+    if (this.editor && this.editing)
+      this.editor.set({ isAdmin: data.is_admin, own: data.own, hasDefault: !!data.default, sameAsDefault: this.sameAsDefault() });
     this.refresh();
+  }
+
+  sameAsDefault() {
+    return !!this.data?.own && !!this.data.default && JSON.stringify(this.data.layout) === JSON.stringify(this.data.default);
+  }
+
+  /**
+   * HA's panelOrder changed. The first value is only the baseline (a page load never re-sorts).
+   * Our own writes are skipped by signature, and adopting a matching order is a no-op anyway, so a
+   * save cannot loop. Every open browser of the user computes the same layout from the same inputs;
+   * the save makes it stick for devices that open later.
+   */
+  onNative(value) {
+    const order = Array.isArray(value?.panelOrder) ? value.panelOrder : null;
+    const sig = JSON.stringify(order);
+    const first = this.nativeSig === undefined;
+    const prev = this.nativeSig;
+    this.nativeSig = sig;
+    const ours = sig === this.writtenSig;
+    if (ours) this.writtenSig = null;
+    if (first || ours || sig === prev || !order) return;
+    // While editing, Done writes the editor's order over it.
+    if (this.editing || !this.data?.layout) return;
+    const layout = L.adoptOrder(this.data.layout, order);
+    if (!layout) return;
+    this.data = { ...this.data, layout };
+    this.refresh();
+    // Every open browser of the user sees the same change. After a short random wait the first save
+    // has reached the others, which then find nothing left to adopt in the server's layout.
+    clearTimeout(this.adoptTimer);
+    this.adoptTimer = setTimeout(() => {
+      if (this.nativeSig !== sig || this.editing) return;
+      const next = L.adoptOrder(this.serverLayout, order);
+      if (next) this.hass.callWS({ type: `${DOMAIN}/save`, layout: next }).catch(() => {});
+    }, Math.random() * ADOPT_SPREAD_MS);
   }
 
   refresh() {
@@ -1002,7 +1173,14 @@ class Controller {
     for (const p of all) {
       const el = this.sb.shadowRoot.getElementById(`sidebar-panel-${p.url_path}`);
       const title = el?.querySelector(".item-text")?.textContent?.trim() || panelTitle(hass, p);
-      info.set(p.url_path, { title, icon: p.icon || PANEL_ICONS[p.url_path] || (p.component_name === "lovelace" ? "mdi:view-dashboard" : "mdi:application-outline") });
+      // The icon HA's own row shows (built-in panels draw an SVG path, not panel.icon).
+      const iconPath = el?.querySelector('ha-svg-icon[slot="start"]')?.path || null;
+      const icon =
+        el?.querySelector('ha-icon[slot="start"]')?.icon ||
+        PANEL_ICONS[p.url_path] ||
+        p.icon ||
+        (p.component_name === "lovelace" ? "mdi:view-dashboard" : "mdi:application-outline");
+      info.set(p.url_path, { title, icon, iconPath });
     }
     return { paths: all.map((p) => p.url_path), hidden, defaultInvisible, info, locked: new Set([def]) };
   }
@@ -1010,9 +1188,10 @@ class Controller {
   startEdit() {
     if (!this.data) return;
     const { paths, hidden, defaultInvisible, info, locked } = this.allPanels();
-    this.edit = { paths, defaultInvisible };
-    if (!this.editor) this.editor = document.createElement("esp-editor");
     const tree = L.buildTree(this.data.layout, paths);
+    // What the editor opened with: Done without a change from it saves nothing.
+    this.edit = { paths, defaultInvisible, baseTree: tree, baseHidden: new Set(hidden) };
+    if (!this.editor) this.editor = document.createElement("esp-editor");
     this.editing = true;
     this.editor.open({
       tree,
@@ -1024,6 +1203,7 @@ class Controller {
       isAdmin: this.data.is_admin,
       own: this.data.own,
       hasDefault: !!this.data.default,
+      sameAsDefault: this.sameAsDefault(),
       actions: this.actions(),
     });
     this.refresh();
@@ -1046,14 +1226,27 @@ class Controller {
       const visible = tree.filter((n) => !n.missing);
       return t(lang(), "movedTop", { name, pos: visible.indexOf(at.node) + 1 });
     };
+    // The editor now holds what was saved: Done without a further change closes without saving.
+    const rebase = () => {
+      this.edit.baseTree = ed().tree;
+      this.edit.baseHidden = new Set(ed().hiddenSet);
+    };
     return {
       done: () => {
-        if (!ed().focusInvalidName()) this.save(ed().tree, ed().hiddenSet);
+        const e = ed();
+        if (e.focusInvalidName()) return;
+        if (!L.editChanged(this.edit.baseTree, e.tree, this.edit.baseHidden, e.hiddenSet)) return this.stopEdit();
+        // A user on the admin default is told once, before the save, that it stops following the default.
+        if (!this.data.own && this.data.default && !e.forkNoted) {
+          e.set({ forkNoted: true, notice: t(lang(), "forkNote"), error: "", status: "" }, "done");
+          return;
+        }
+        this.save(e.tree, e.hiddenSet);
       },
       cancel: () => this.stopEdit(),
       addGroup: () => {
         const id = L.newGroupId(ed().tree);
-        ed().set({ tree: L.addGroup(ed().tree, id, t(lang(), "newGroup")) }, `name:${id}`);
+        ed().set({ tree: L.addGroup(ed().tree, id, L.uniqueName(ed().tree, t(lang(), "newGroup"))) }, `name:${id}`);
         ed().shadowRoot.querySelector(`[data-focus-key="name:${id}"]`)?.select();
       },
       rename: (id, input) => {
@@ -1089,7 +1282,7 @@ class Controller {
       drop: (key, targetKey, zone) => {
         if (zone === "merge") {
           const id = L.newGroupId(ed().tree);
-          const tree = L.merge(ed().tree, key, targetKey, id, t(lang(), "newGroup"));
+          const tree = L.merge(ed().tree, key, targetKey, id, L.uniqueName(ed().tree, t(lang(), "newGroup")));
           ed().set({ tree }, `name:${id}`);
           ed().shadowRoot.querySelector(`[data-focus-key="name:${id}"]`)?.select();
           ed().announce(t(lang(), "grouped", { a: ed().name(targetKey), b: ed().name(key) }));
@@ -1099,44 +1292,66 @@ class Controller {
         ed().set({ tree }, `handle:${key}`);
         ed().announce(where(tree, key));
       },
+      // Reset drops the user's layout; the editor stays open on the default (session edits dropped),
+      // HA's native order is rewritten from the default, and Done then closes without saving.
       reset: async () => {
+        const e = ed();
         try {
           await this.hass.callWS({ type: `${DOMAIN}/reset` });
-          this.stopEdit();
+          const tree = L.buildTree(this.data.default, this.edit.paths);
+          await this.writeNative(tree, this.edit.baseHidden);
+          e.set({ tree, hiddenSet: new Set(this.edit.baseHidden), confirming: null, notice: "", error: "", status: t(lang(), "resetDone") }, "done");
+          rebase();
         } catch (err) {
-          ed().set({ error: t(lang(), "saveFailed", { error: err?.message ?? err }) });
+          e.set({ confirming: null, error: this.failText(err) });
         }
       },
       setDefault: async () => {
-        if (ed().focusInvalidName()) return;
-        if (await this.save(ed().tree, ed().hiddenSet, false))
-          try {
-            await this.hass.callWS({ type: `${DOMAIN}/default/set`, layout: L.toLayout(ed().tree) });
-            this.stopEdit();
-          } catch (err) {
-            ed().set({ error: t(lang(), "saveFailed", { error: err?.message ?? err }) });
-          }
+        const e = ed();
+        if (e.focusInvalidName()) return;
+        if (!(await this.save(e.tree, e.hiddenSet, false))) return e.set({ confirming: null });
+        try {
+          await this.hass.callWS({ type: `${DOMAIN}/default/set`, layout: L.toLayout(e.tree) });
+          rebase();
+          e.set({ confirming: null, notice: "", error: "", status: t(lang(), "setDefaultDone") }, "done");
+        } catch (err) {
+          e.set({ confirming: null, error: this.failText(err) });
+        }
       },
       clearDefault: async () => {
+        const e = ed();
         try {
           await this.hass.callWS({ type: `${DOMAIN}/default/set`, layout: null });
+          e.set({ confirming: null, error: "", status: t(lang(), "clearDefaultDone") }, "done");
         } catch (err) {
-          ed().set({ error: t(lang(), "saveFailed", { error: err?.message ?? err }) });
+          e.set({ confirming: null, error: this.failText(err) });
         }
       },
     };
   }
 
+  /** A short localized message for a failed write: never a raw code, an id or the server's English text. */
+  failText(err) {
+    const kind = L.saveErrorKind(err);
+    return t(this.lang, kind === "connection" ? "saveFailedConnection" : kind === "invalid" ? "saveFailedInvalid" : "saveFailed");
+  }
+
+  /** HA's native sidebar user data from a tree (order and hidden panels). */
+  async writeNative(tree, hidden) {
+    const current = (await this.hass.callWS({ type: "frontend/get_user_data", key: "sidebar" }))?.value ?? {};
+    const value = L.nativeSidebar(current, tree, new Set(this.edit.paths), hidden, this.edit.defaultInvisible);
+    // The subscription echoes this write back: it is ours, not a change to adopt.
+    this.writtenSig = JSON.stringify(value.panelOrder);
+    await this.hass.callWS({ type: "frontend/set_user_data", key: "sidebar", value });
+  }
+
   async save(tree, hidden, close = true) {
-    const known = new Set(this.edit.paths);
-    const invisible = this.edit.defaultInvisible;
+    this.editor.set({ error: "" });
     try {
       await this.hass.callWS({ type: `${DOMAIN}/save`, layout: L.toLayout(tree) });
-      const current = (await this.hass.callWS({ type: "frontend/get_user_data", key: "sidebar" }))?.value ?? {};
-      const value = L.nativeSidebar(current, tree, known, hidden, invisible);
-      await this.hass.callWS({ type: "frontend/set_user_data", key: "sidebar", value });
+      await this.writeNative(tree, hidden);
     } catch (err) {
-      this.editor.set({ error: t(this.lang, "saveFailed", { error: err?.message ?? err }) });
+      this.editor.set({ error: this.failText(err) });
       return false;
     }
     if (close) this.stopEdit();
