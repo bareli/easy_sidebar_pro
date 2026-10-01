@@ -35,7 +35,7 @@ appear ~6 s after load (DOM patching after render), and using HA's native editor
 7. **Zero YAML**: the integration registers its JS with `frontend.add_extra_js_url`.
 
 Non-goals v0.1: nested groups, per-device layouts, group visibility per user role, theming options,
-custom (non-panel) links.
+custom (non-panel) links. (Theming, collapse options and pinned icons were added in v0.3, see section 7.)
 
 ## 3. Architecture
 
@@ -65,9 +65,13 @@ custom (non-panel) links.
   "groups": {"a1b2c3": {"name": "בית", "icon": "mdi:home", "panels": ["calendar", "todo"]}}
 }
 ```
+- v0.3 adds optional keys (layouts without them load with the defaults; the server returns the full form):
+  `groups.<id>.color` / `icon_color` (null, a named theme colour or `#rrggbb`), `grid` (pinned panels,
+  at most 20), `groups.<id>.start_open` (boolean, default false) and `settings` `{start_collapsed,
+  accordion, toggle_all, header: plain|tinted|line|pill, divider: line|none}`. See section 7.
 - `order`: top-level entries, a panel `url_path` or `g:<group id>`.
 - Rules: version 1; group id `[a-z0-9]{1,16}`; every group appears in `order` exactly once and
-  every `g:` entry exists; a panel appears at most once in the whole layout; name 1-50 chars, no
+  every `g:` entry exists; a panel appears at most once in the whole layout (order, groups and grid); name 1-50 chars, no
   control characters; icon `prefix:name` (≤64) or null; panel path `[A-Za-z0-9_-]{1,100}`; at most
   50 groups, 500 entries total.
 - Panels the layout does not mention (new dashboards, new add-ons) appear at the end of the top
@@ -115,3 +119,75 @@ custom (non-panel) links.
 - Ships as an integration (auto-loads the JS, holds the admin default).
 - Layout per user, stored server side, with an admin default.
 - Edit mode entry: pencil button in the sidebar header; HA's long-press keeps opening HA's dialog.
+
+## 7. v0.3: styling, collapse settings, pinned grid (issues #27, #28, #29, #33, #34)
+
+Requested for parity with Sidebar Organizer. Everything is part of the layout (per user, admin default),
+edited in the in-sidebar editor, validated by `layout.py` and mirrored in `layout.js`.
+
+### 7.1 Colours and styles (#27)
+- Per group `color` (header name, guide line, "line above") and `icon_color` (header icon, member icons;
+  the header icon falls back to `color`). Values: null, a named HA theme colour (`primary`, `accent`,
+  `red`, `pink`, `purple`, `indigo`, `blue`, `cyan`, `teal`, `green`, `lime`, `amber`, `orange`, `brown`,
+  `grey`, drawn as `var(--<name>-color)`, so themes redefine them per mode) or `#rrggbb` (`#rgb` is
+  expanded, output lowercase). Anything else is refused (`invalid_format`).
+- Contrast: the frontend resolves the colour and the sidebar background / text of the current theme
+  (re-read when `hass.themes` changes; a theme or light / dark change re-renders the sidebar, which
+  HA's own sidebar does not do) and mixes the colour toward the theme's text colour only as far
+  as needed: 4.5:1 for the name (on the tinted header background when used), 3:1 for icons and lines.
+- `settings.header`: `plain` | `tinted` (background = 14% of the group colour, or a neutral tint) |
+  `line` (a line above each group, not above the first row) | `pill` (#34, forum request: fully rounded,
+  radius 20 px, background = the theme's `--esp-group-header-background`, else the sidebar mixed 10% toward
+  its text colour, i.e. lighter on dark themes and darker on light ones; a group colour tints that by 18%).
+  For `pill` the frontend computes the background and adjusts the name (4.5:1), the count and chevron
+  (4.5:1), the selected colours (4.5:1 / 3:1) and the icon (3:1) against it with the same contrast
+  function; it is recomputed on a theme or light / dark change. `settings.divider`: `line` | `none` (the
+  guide line beside grouped items).
+- Theme CSS variables (lower precedence than a group's own colour): `--esp-group-header-text-color`,
+  `--esp-group-header-icon-color`, `--esp-group-header-background`, `--esp-group-header-radius`,
+  `--esp-group-divider-color`, `--esp-group-divider-width`.
+
+### 7.2 Collapse settings (#28)
+- `start_collapsed`: on each page load every group starts folded; folding is kept in the page only (not
+  written to the server, so devices do not fold each other). Turned on during a session, the current
+  state is kept until the next load.
+- `accordion`: opening a group folds every other shown group. "Expand all" would break that, so with
+  `accordion` the `toggle_all` button only collapses: it is shown while a group is open and hidden when
+  every group is folded.
+- `groups.<id>.start_open` (#33, forum request): with `start_collapsed`, a page load folds every group
+  except those with `start_open`; with `accordion` only the first of them in sidebar order among the groups
+  shown (with a visible panel) opens. Worked out at the first render after the layout arrives (the visible
+  panels are known then); later layout pushes in the same page do not re-apply it.
+  Precedence on a page load: (1) `start_collapsed` on: `start_open` decides, stored fold memory is ignored
+  and folding is not written; (2) `start_collapsed` off: the user's stored folded set applies and
+  `start_open` has no effect. Editor: an open-folder toggle button (`aria-pressed`) on each group row,
+  shown only while "Groups start collapsed" is checked. Server: boolean or refused (`invalid_format`),
+  missing = false.
+- `toggle_all`: a collapse all / expand all button next to the sidebar title (expanded sidebar only,
+  two or more groups). Off by default: it shortens the title. The title takes its direction from its own
+  text (`unicode-bidi: plaintext`), so a Latin name in a Hebrew UI is cut at its end ("Home Assi...").
+  Collapse all when any group is open, expand all otherwise; stored like a click (or page-only with `start_collapsed`).
+
+### 7.3 Pinned grid (#29)
+- `grid`: panels shown as icons at the top of HA's fixed (bottom) list, above Settings / Notifications /
+  profile. Rendered by patching `_renderFixedPanels` (feature-detected; without it pinned panels stay
+  in the main list) with HA's own `_renderPanel` rows, so icons, selection, navigation and HA's list
+  keyboard handling are native. The fixed list wraps rows (`flex-flow: row wrap`) while it holds pins;
+  four cells per row in the expanded sidebar, one column in the icon-only rail.
+- Tooltips: HA draws row tooltips only in the rail; pinned rows are rendered as if icon-only (a view
+  object with `alwaysExpand: false`) so they get HA's tooltip, placed on top in the expanded grid.
+- Keyboard: Left / Right along a row (mirrored in RTL), Up / Down by grid row, Down from the last row to
+  the next HA row (capture-phase handler on the fixed list; HA's own keys for everything else).
+  Screen readers: each pinned row keeps its name and gets `aria-describedby` "Pinned".
+- Editor: a "Pinned at the bottom" block, always last; drop panels into it like a group; a group dropped
+  on it lands above it; at most 20 items (drops refused when full); Alt + Down from the last row pins.
+  Hidden pinned panels are not shown. HA's native `panelOrder` lists pinned panels last. An order saved
+  in HA's Edit sidebar dialog re-sorts the pinned panels by their relative order there (like group
+  members); they stay pinned wherever HA lists them.
+
+### 7.4 Sidebar Organizer options not taken
+- Sidebar background / scrollbar colours, width, text transform, custom theme per sidebar: HA themes
+  already do these. Per-mode colour pairs: replaced by theme colours plus automatic contrast.
+- Bottom items as full rows / bottom groups, custom (non-panel) items with actions, visibility and
+  notification templates, YAML config file: out of scope for this release.
+- Animations (delay / off): no slide animation is added.

@@ -7,6 +7,7 @@ from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.easy_sidebar_pro.const import DOMAIN
+from custom_components.easy_sidebar_pro.layout import validate_layout
 
 
 
@@ -16,6 +17,7 @@ async def _recv(ws):
 
 
 LAYOUT = {"version": 1, "order": ["map", "g:home"], "groups": {"home": {"name": "בית", "icon": None, "panels": ["todo"]}}}
+N_LAYOUT = validate_layout(LAYOUT)
 
 
 async def test_bug_010_subscription_survives_entry_reload(hass: HomeAssistant, entry: MockConfigEntry, hass_ws_client) -> None:
@@ -34,7 +36,7 @@ async def test_bug_010_subscription_survives_entry_reload(hass: HomeAssistant, e
     assert next(m for m in msgs if m["type"] == "result")["success"]
     events = [m["event"] for m in msgs if m["type"] == "event"]
     assert events, "no event after save"
-    assert events[-1]["layout"] == LAYOUT, f"open subscription got stale data: {events[-1]}"
+    assert events[-1]["layout"] == N_LAYOUT, f"open subscription got stale data: {events[-1]}"
 
 
 async def test_bug_010_reload_pushes_new_store_to_open_subscription(
@@ -55,4 +57,4 @@ async def test_bug_010_reload_pushes_new_store_to_open_subscription(
     await hass.async_block_till_done()
 
     event = await _recv(ws)
-    assert event["type"] == "event" and event["event"]["layout"] == LAYOUT
+    assert event["type"] == "event" and event["event"]["layout"] == N_LAYOUT

@@ -10,6 +10,7 @@ from homeassistant.data_entry_flow import FlowResultType
 from pytest_homeassistant_custom_component.common import MockConfigEntry, flush_store
 
 from custom_components.easy_sidebar_pro.const import DOMAIN
+from custom_components.easy_sidebar_pro.layout import validate_layout
 from custom_components.easy_sidebar_pro.websocket import DATA_STORE
 
 LAYOUT: dict[str, Any] = {
@@ -18,6 +19,9 @@ LAYOUT: dict[str, Any] = {
     "groups": {"home": {"name": "בית", "icon": "mdi:home", "panels": ["calendar", "todo"]}},
 }
 OTHER = {"version": 1, "order": ["map", "lovelace"], "groups": {}}
+# The server returns the canonical form (v0.3: colours, grid and settings filled in).
+N_LAYOUT = validate_layout(LAYOUT)
+N_OTHER = validate_layout(OTHER)
 
 
 def _module_urls(hass: HomeAssistant) -> list[str]:
@@ -54,7 +58,7 @@ async def test_subscribe_save_collapse_reset(hass: HomeAssistant, entry, hass_ws
     msgs = [await ws.receive_json(), await ws.receive_json()]
     event = next(m for m in msgs if m["type"] == "event")["event"]
     assert next(m for m in msgs if m["type"] == "result")["success"]
-    assert event["own"] is True and event["layout"] == LAYOUT
+    assert event["own"] is True and event["layout"] == N_LAYOUT
 
     await ws.send_json_auto_id({"type": f"{DOMAIN}/collapsed", "collapsed": ["home"]})
     msgs = [await ws.receive_json(), await ws.receive_json()]
@@ -93,19 +97,19 @@ async def test_default_layout_admin_only_and_shared(hass: HomeAssistant, entry, 
     await admin.send_json_auto_id({"type": f"{DOMAIN}/default/set", "layout": LAYOUT})
     assert (await admin.receive_json())["success"]
     event = (await user.receive_json())["event"]
-    assert event == {"layout": LAYOUT, "default": LAYOUT, "own": False, "collapsed": [], "is_admin": False}
+    assert event == {"layout": N_LAYOUT, "default": N_LAYOUT, "own": False, "collapsed": [], "is_admin": False}
 
     # The user's own layout wins over the default; the admin's save does not reach the user.
     await user.send_json_auto_id({"type": f"{DOMAIN}/save", "layout": OTHER})
     msgs = [await user.receive_json(), await user.receive_json()]
-    assert next(m for m in msgs if m["type"] == "event")["event"]["layout"] == OTHER
+    assert next(m for m in msgs if m["type"] == "event")["event"]["layout"] == N_OTHER
     await admin.send_json_auto_id({"type": f"{DOMAIN}/save", "layout": LAYOUT})
     assert (await admin.receive_json())["success"]
 
     await admin.send_json_auto_id({"type": f"{DOMAIN}/default/set", "layout": None})
     assert (await admin.receive_json())["success"]
     event = (await user.receive_json())["event"]
-    assert event["default"] is None and event["layout"] == OTHER
+    assert event["default"] is None and event["layout"] == N_OTHER
 
 
 async def test_persists_across_reload(hass: HomeAssistant, entry, hass_ws_client, hass_storage) -> None:
@@ -118,14 +122,14 @@ async def test_persists_across_reload(hass: HomeAssistant, entry, hass_ws_client
     assert await hass.config_entries.async_reload(entry.entry_id)
     await hass.async_block_till_done()
     stored = hass_storage[DOMAIN]["data"]
-    assert stored["default"] == OTHER
-    assert list(stored["users"].values())[0]["layout"] == LAYOUT
+    assert stored["default"] == N_OTHER
+    assert list(stored["users"].values())[0]["layout"] == N_LAYOUT
 
     ws2 = await hass_ws_client(hass)
     await ws2.send_json_auto_id({"type": f"{DOMAIN}/subscribe"})
     await ws2.receive_json()
     event = (await ws2.receive_json())["event"]
-    assert event["layout"] == LAYOUT and event["default"] == OTHER and event["own"] is True
+    assert event["layout"] == N_LAYOUT and event["default"] == N_OTHER and event["own"] is True
 
 
 async def test_corrupt_storage_is_ignored(hass: HomeAssistant, hass_storage, hass_ws_client) -> None:

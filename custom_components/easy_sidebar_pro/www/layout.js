@@ -1,19 +1,39 @@
 // Pure layout model for Easy Sidebar Pro. No DOM, no Home Assistant.
 //
-// Layout (stored):  { version: 1, order: ["path" | "g:<id>"], groups: { id: { name, icon, panels: [path] } } }
-// Tree (editing):   [ { type: "panel", path } | { type: "group", id, name, icon, children: [panel nodes] } ]
+// Layout (stored):  { version: 1, order: ["path" | "g:<id>"], groups: { id: { name, icon, color, icon_color, start_open, panels: [path] } },
+//                     grid: [path], settings: { start_collapsed, accordion, toggle_all, header, divider } }
+// Tree (editing):   [ { type: "panel", path } | { type: "group", id, name, icon, color, icon_color, start_open, children: [panel nodes] } ]
+//                   The bottom grid is a group-like node with `pins: true` (id PINS_ID), always last.
 // Keys:             "p:<path>" for a panel, "g:<id>" for a group.
 
 export const GROUP_PREFIX = "g:";
 export const LAYOUT_VERSION = 1;
 export const MAX_NAME = 50;
+export const MAX_PINNED = 20;
+// Not a valid stored group id (those are [a-z0-9]), so it never collides with a real group.
+export const PINS_ID = "_pins";
+export const PINS_KEY = `g:${PINS_ID}`;
+// Same lists as const.py. Named colours are Home Assistant theme variables (`--<name>-color`).
+export const NAMED_COLORS = ["primary", "accent", "red", "pink", "purple", "indigo", "blue", "cyan", "teal", "green", "lime", "amber", "orange", "brown", "grey"];
+export const HEADER_STYLES = ["plain", "tinted", "line", "pill"];
+export const DIVIDER_STYLES = ["line", "none"];
+// Keys of a stored group, in the server's output order (const.py GROUP_KEYS).
+export const GROUP_KEYS = ["name", "icon", "color", "icon_color", "start_open", "panels"];
+export const DEFAULT_SETTINGS = Object.freeze({ start_collapsed: false, accordion: false, toggle_all: false, header: "plain", divider: "line" });
 
 export const panelKey = (path) => `p:${path}`;
 export const groupKey = (id) => `g:${id}`;
 export const keyOf = (node) => (node.type === "group" ? groupKey(node.id) : panelKey(node.path));
 
-/** Build the tree from a layout and HA's panel paths (in HA's order). */
-export function buildTree(layout, paths) {
+export const isPins = (node) => node?.type === "group" && node.id === PINS_ID;
+export const pinsNode = (children = []) => ({ type: "group", id: PINS_ID, pins: true, name: "", icon: null, color: null, icon_color: null, start_open: false, children });
+const newGroup = (id, name, children) => ({ type: "group", id, name, icon: null, color: null, icon_color: null, start_open: false, children });
+
+/**
+ * Build the tree from a layout and HA's panel paths (in HA's order). Pinned panels (`grid`) go to
+ * the pins node at the end, which exists when something is pinned or `withPins` asks for it (editor).
+ */
+export function buildTree(layout, paths, withPins = false) {
   const known = new Set(paths);
   const placed = new Set();
   const tree = [];
@@ -28,30 +48,59 @@ export function buildTree(layout, paths) {
     if (entry.startsWith(GROUP_PREFIX)) {
       const id = entry.slice(GROUP_PREFIX.length);
       const g = groups[id];
-      if (!g || tree.some((n) => n.type === "group" && n.id === id)) continue;
+      if (!g || id === PINS_ID || tree.some((n) => n.type === "group" && n.id === id)) continue;
       const children = [];
       for (const p of g.panels ?? []) if (typeof p === "string" && !placed.has(p)) children.push(panel(p));
-      tree.push({ type: "group", id, name: g.name, icon: g.icon ?? null, children });
+      tree.push({ type: "group", id, name: g.name, icon: g.icon ?? null, color: g.color ?? null, icon_color: g.icon_color ?? null, start_open: g.start_open === true, children });
     } else if (!placed.has(entry)) {
       tree.push(panel(entry));
     }
   }
+  const pins = [];
+  for (const p of Array.isArray(layout?.grid) ? layout.grid : [])
+    if (typeof p === "string" && !placed.has(p) && pins.length < MAX_PINNED) pins.push(panel(p));
   for (const p of paths) if (!placed.has(p)) tree.push(panel(p));
+  if (pins.length || withPins) tree.push(pinsNode(pins));
   return tree;
 }
 
-export function toLayout(tree) {
+export function toLayout(tree, settings) {
   const order = [];
   const groups = {};
+  let grid = [];
   for (const n of tree) {
-    if (n.type === "group") {
+    if (isPins(n)) grid = n.children.map((c) => c.path);
+    else if (n.type === "group") {
       order.push(groupKey(n.id));
-      groups[n.id] = { name: n.name, icon: n.icon ?? null, panels: n.children.map((c) => c.path) };
+      groups[n.id] = {
+        name: n.name,
+        icon: n.icon ?? null,
+        color: n.color ?? null,
+        icon_color: n.icon_color ?? null,
+        start_open: n.start_open === true,
+        panels: n.children.map((c) => c.path),
+      };
     } else {
       order.push(n.path);
     }
   }
-  return { version: LAYOUT_VERSION, order, groups };
+  return { version: LAYOUT_VERSION, order, groups, grid, settings: cleanSettings(settings) };
+}
+
+/** Settings with defaults for anything missing or invalid (the server refuses invalid ones). */
+export function cleanSettings(value) {
+  const out = { ...DEFAULT_SETTINGS };
+  if (!value || typeof value !== "object") return out;
+  for (const key of ["start_collapsed", "accordion", "toggle_all"]) if (typeof value[key] === "boolean") out[key] = value[key];
+  if (HEADER_STYLES.includes(value.header)) out.header = value.header;
+  if (DIVIDER_STYLES.includes(value.divider)) out.divider = value.divider;
+  return out;
+}
+
+/** Visible pinned panels, in the grid's order. */
+export function pinned(layout, visible) {
+  const shown = new Set(visible);
+  return (Array.isArray(layout?.grid) ? layout.grid : []).filter((p) => typeof p === "string" && shown.has(p)).slice(0, MAX_PINNED);
 }
 
 /** Flat panel order, for HA's native `sidebar.panelOrder`. */
@@ -79,6 +128,7 @@ export function arrange(layout, visible, collapsed, selected) {
       if (shown.has(n.path)) rows.push({ type: "panel", path: n.path, group: null });
       continue;
     }
+    if (isPins(n)) continue;
     const kids = n.children.filter((c) => shown.has(c.path));
     if (!kids.length) continue;
     const isCollapsed = folded.has(n.id);
@@ -87,6 +137,8 @@ export function arrange(layout, visible, collapsed, selected) {
       id: n.id,
       name: n.name,
       icon: n.icon,
+      color: n.color ?? null,
+      icon_color: n.icon_color ?? null,
       collapsed: isCollapsed,
       count: kids.length,
       selected: kids.some((c) => c.path === selected),
@@ -131,23 +183,43 @@ function put(tree, node, group, index) {
  * a group dropped on a grouped panel lands next to that panel's group.
  */
 export function move(tree, key, targetKey, zone) {
-  if (key === targetKey) return tree;
+  if (key === targetKey || key === PINS_KEY) return tree;
   const next = clone(tree);
-  const node = locate(next, key)?.node;
-  if (!node || !locate(next, targetKey)) return tree;
+  const from = locate(next, key);
+  const node = from?.node;
+  const to = locate(next, targetKey);
+  if (!node || !to) return tree;
   if (node.type === "group" && zone === "into") return tree;
+  // A group never enters the pinned area: dropped on it, it lands right above it.
+  if (node.type === "group" && (targetKey === PINS_KEY || to.group === PINS_ID)) {
+    targetKey = PINS_KEY;
+    zone = "before";
+  }
+  const intoPins = (zone === "into" && targetKey === PINS_KEY) || (zone !== "into" && to.group === PINS_ID);
+  if (intoPins && from.group !== PINS_ID && pinsFull(next)) return tree;
   take(next, key);
   let target = locate(next, targetKey);
   if (zone === "into") {
     if (target.node.type !== "group") return tree;
     target.node.children.push(node);
-    return next;
+    return pinsLast(next);
   }
   if (node.type === "group" && target.group !== null) {
     target = { group: null, index: groupIndex(next, target.group), node: null };
   }
   put(next, node, target.group, target.index + (zone === "after" ? 1 : 0));
-  return next;
+  return pinsLast(next);
+}
+
+export const pinsFull = (tree) => (tree.find(isPins)?.children.length ?? 0) >= MAX_PINNED;
+
+/** The pinned area stays the last top-level entry (a drop after its header lands above it). */
+function pinsLast(tree) {
+  const i = tree.findIndex(isPins);
+  if (i < 0 || i === tree.length - 1) return tree;
+  const [pins] = tree.splice(i, 1);
+  tree.push(pins);
+  return tree;
 }
 
 /** Drop panel `key` onto panel `targetKey`: a new group holding [target, dropped] where the target was. */
@@ -159,18 +231,18 @@ export function merge(tree, key, targetKey, id, name) {
   if (target.group !== null) return move(tree, key, targetKey, "after");
   take(next, key);
   const at = locate(next, targetKey);
-  next.splice(at.index, 1, { type: "group", id, name, icon: null, children: [at.node, node] });
+  next.splice(at.index, 1, newGroup(id, name, [at.node, node]));
   return next;
 }
 
 export function addGroup(tree, id, name) {
-  return [{ type: "group", id, name, icon: null, children: [] }, ...clone(tree)];
+  return [newGroup(id, name, []), ...clone(tree)];
 }
 
 /** Dissolve a group; its panels take its place. */
 export function ungroup(tree, id) {
   const i = groupIndex(tree, id);
-  if (i < 0) return tree;
+  if (i < 0 || id === PINS_ID) return tree;
   const next = clone(tree);
   next.splice(i, 1, ...next[i].children);
   return next;
@@ -197,11 +269,13 @@ export function moveBy(tree, key, delta) {
     const tops = rows.filter((r) => r.group === null);
     const i = tops.findIndex((r) => r.key === key);
     const other = tops[i + delta];
-    return other ? move(tree, key, other.key, delta > 0 ? "after" : "before") : tree;
+    return other && other.key !== PINS_KEY ? move(tree, key, other.key, delta > 0 ? "after" : "before") : tree;
   }
   const i = rows.findIndex((r) => r.key === key);
   if (delta > 0) {
     const nxt = rows[i + 1];
+    // The pinned area is the end of the sidebar: nothing below it.
+    if (at.group === PINS_ID && (!nxt || nxt.group !== PINS_ID)) return tree;
     if (at.group !== null && (!nxt || nxt.group !== at.group)) return move(tree, key, groupKey(at.group), "after");
     if (!nxt) return tree;
     if (nxt.isGroup) {
@@ -305,20 +379,22 @@ export function adoptOrder(layout, order) {
     typeof e !== "string" ? undefined : e.startsWith(GROUP_PREFIX) ? groupRank(e.slice(GROUP_PREFIX.length)) : rank.get(e),
   );
   const next = { ...layout, order: order2, groups };
+  // Pinned panels follow HA's relative order among themselves and stay pinned wherever HA lists them (UX-008).
+  if (Array.isArray(layout.grid)) next.grid = resort(layout.grid, (p) => rank.get(p));
   return JSON.stringify(next) === JSON.stringify(layout) ? null : next;
 }
 
-/** Whether the editor holds anything to save: the layout or the hidden set differ from when it opened. */
-export function editChanged(baseTree, tree, baseHidden, hidden) {
-  if (JSON.stringify(toLayout(baseTree)) !== JSON.stringify(toLayout(tree))) return true;
+/** Whether the editor holds anything to save: the layout (with settings) or the hidden set differ from when it opened. */
+export function editChanged(baseTree, tree, baseHidden, hidden, baseSettings, settings) {
+  if (JSON.stringify(toLayout(baseTree, baseSettings)) !== JSON.stringify(toLayout(tree, settings))) return true;
   if (baseHidden.size !== hidden.size) return true;
   for (const p of hidden) if (!baseHidden.has(p)) return true;
   return false;
 }
 
-/** What Done would save: "none", "hidden-only" (only the hide/show set differs) or "structure" (order, groups, names, icons). */
-export function editKind(baseTree, tree, baseHidden, hidden) {
-  if (JSON.stringify(toLayout(baseTree)) !== JSON.stringify(toLayout(tree))) return "structure";
+/** What Done would save: "none", "hidden-only" (only the hide/show set differs) or "structure" (order, groups, names, icons, colours, pins, settings). */
+export function editKind(baseTree, tree, baseHidden, hidden, baseSettings, settings) {
+  if (JSON.stringify(toLayout(baseTree, baseSettings)) !== JSON.stringify(toLayout(tree, settings))) return "structure";
   return editChanged(baseTree, tree, baseHidden, hidden) ? "hidden-only" : "none";
 }
 
@@ -330,6 +406,148 @@ export function nativeHidden(current, known, hidden, invisible) {
   );
   return { ...current, hiddenPanels: [...hiddenPanels, ...keep] };
 }
+
+/* ------------------------------------------------------------------ collapse */
+
+/** Collapsed ids after clicking group `id`. Accordion: opening one folds every other group in `ids`. */
+export function toggleCollapsed(collapsed, id, accordion, ids) {
+  const set = new Set(collapsed ?? []);
+  if (!set.has(id)) {
+    set.add(id);
+    return [...set];
+  }
+  if (accordion) return [...new Set([...set, ...ids])].filter((g) => g !== id);
+  set.delete(id);
+  return [...set];
+}
+
+/**
+ * Folded group ids for a page load with "groups start collapsed" on: every group folds except those
+ * marked "starts open"; with `accordion` only the first of them (in sidebar order) among the groups
+ * shown right now (a group with a visible panel in `visible`), so the rule "one open" holds.
+ */
+export function initialCollapsed(layout, visible, accordion = false) {
+  const groups = layout?.groups ?? {};
+  const shown = new Set(visible ?? []);
+  const ids = [];
+  for (const entry of Array.isArray(layout?.order) ? layout.order : [])
+    if (typeof entry === "string" && entry.startsWith(GROUP_PREFIX) && groups[entry.slice(GROUP_PREFIX.length)]) ids.push(entry.slice(GROUP_PREFIX.length));
+  for (const id of Object.keys(groups)) if (!ids.includes(id)) ids.push(id);
+  let open = ids.filter((id) => groups[id]?.start_open === true);
+  if (accordion) {
+    const first = open.find((id) => (groups[id].panels ?? []).some((p) => shown.has(p)));
+    open = first ? [first] : [];
+  }
+  return ids.filter((id) => !open.includes(id));
+}
+
+/** Whether any of `ids` is open (then "collapse all" applies; otherwise "expand all"). */
+export function anyOpen(collapsed, ids) {
+  const set = new Set(collapsed ?? []);
+  return ids.some((id) => !set.has(id));
+}
+
+/**
+ * What the collapse / expand all button does now: "collapse" when any group is open, otherwise "expand",
+ * except with "one group open at a time" (accordion), where expanding all would break the rule: null
+ * (the button is hidden until a group is opened).
+ */
+export function allAction(collapsed, ids, accordion = false) {
+  if (anyOpen(collapsed, ids)) return "collapse";
+  return accordion ? null : "expand";
+}
+
+/** Collapse all when any group is open, otherwise expand all (not in accordion mode). Ids not in `ids` keep their state. */
+export function toggleAll(collapsed, ids, accordion = false) {
+  const set = new Set(collapsed ?? []);
+  const action = allAction(collapsed, ids, accordion);
+  if (action === "collapse") for (const id of ids) set.add(id);
+  else if (action === "expand") for (const id of ids) set.delete(id);
+  return [...set];
+}
+
+/* ------------------------------------------------------------------ colours */
+
+const HEX6 = /^#[0-9a-f]{6}$/;
+const HEX_IN = /^#?([0-9a-fA-F]{6}|[0-9a-fA-F]{3})$/;
+
+/** Same rule as layout.py: null, a named theme colour or `#rrggbb` (lowercase). */
+export const validColor = (value) => value === null || NAMED_COLORS.includes(value) || (typeof value === "string" && HEX6.test(value));
+
+/**
+ * What a user typed as a colour, normalised: "" -> null, `#ABC` / `abc` -> `#aabbcc`, a named colour
+ * stays. Returns undefined when it is not a colour.
+ */
+export function normalizeColor(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+  if (NAMED_COLORS.includes(text.toLowerCase())) return text.toLowerCase();
+  const m = HEX_IN.exec(text);
+  if (!m) return undefined;
+  const hex = m[1].toLowerCase();
+  return `#${hex.length === 3 ? [...hex].map((c) => c + c).join("") : hex}`;
+}
+
+/** CSS for a stored colour: a theme variable for a named one, the hex value otherwise; null for none. */
+export function colorCss(value) {
+  if (value === null || !validColor(value)) return null;
+  return value.startsWith("#") ? value : `var(--${value}-color)`;
+}
+
+/** [r, g, b, a] from a computed `rgb()` / `rgba()` / `color(srgb ...)` string, or null. */
+export function parseRgb(text) {
+  const s = String(text ?? "").trim();
+  const alpha = (v) => (v === undefined ? 1 : v.endsWith("%") ? parseFloat(v) / 100 : parseFloat(v));
+  let m = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)(?:\s*[,/]\s*([\d.]+%?))?\s*\)$/.exec(s);
+  if (m) return [+m[1], +m[2], +m[3], alpha(m[4])];
+  m = /^color\(srgb\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)(?:\s*\/\s*([\d.]+%?))?\s*\)$/.exec(s);
+  if (m) return [m[1] * 255, m[2] * 255, m[3] * 255, alpha(m[4])];
+  return null;
+}
+
+const channel = (c) => {
+  const v = c / 255;
+  return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+};
+export const luminance = ([r, g, b]) => 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+
+/** WCAG contrast ratio of two opaque colours. */
+export function contrast(a, b) {
+  const [x, y] = [luminance(a), luminance(b)].sort((p, q) => q - p);
+  return (x + 0.05) / (y + 0.05);
+}
+
+/** `a` mixed toward `b` by `t` (0..1); alpha is dropped. */
+export const mix = (a, b, t) => [0, 1, 2].map((i) => a[i] + (b[i] - a[i]) * t);
+
+/** A colour with alpha drawn over an opaque background. */
+export const over = (fg, bg) => (fg[3] === undefined || fg[3] >= 1 ? fg.slice(0, 3) : mix(bg, fg, fg[3]));
+
+/**
+ * `fg` itself when it reaches `min` contrast on `bg`; otherwise `fg` mixed toward `toward` (the
+ * theme's text colour: darker on light themes, lighter on dark ones) just far enough.
+ */
+export function readable(fg, bg, toward, min) {
+  const base = over(fg, bg);
+  for (let i = 0; i <= 20; i++) {
+    const c = mix(base, toward, i / 20).map((v) => Math.round(v));
+    if (contrast(c, bg) >= min) return c;
+  }
+  return toward.slice(0, 3).map((v) => Math.round(v));
+}
+
+/**
+ * Background of a "pill" header (#34): the theme's header background, or the sidebar a step toward its
+ * text colour (lighter on dark themes, darker on light ones); a group colour tints that by 18%.
+ * pal: { bg, text, headerBg } opaque [r, g, b].
+ */
+export function pillBackground(pal, color = null) {
+  const base = pal.headerBg ?? mix(pal.bg, pal.text, 0.1);
+  const out = color ? mix(base, over(color, base), 0.18) : base;
+  return out.slice(0, 3).map((v) => Math.round(v));
+}
+
+export const rgbCss = (c) => `rgb(${c.map((v) => Math.round(v)).join(", ")})`;
 
 /** `base`, or `base 2`, `base 3`... when a group already has that name. */
 export function uniqueName(tree, base) {

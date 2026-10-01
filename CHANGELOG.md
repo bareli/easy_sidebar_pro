@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.3.0 (unreleased)
+
+Styling, collapse settings and a bottom grid, for parity with Sidebar Organizer (forum request). Everything is set in the sidebar editor and saved with the layout, so it follows each user and the admin default.
+
+- **Group colours** (#27): each group can have a colour (header name, guide line beside its items) and an icon colour (header icon and its items' icons). Pick one of Home Assistant's theme colours (they follow your theme in light and dark mode) or type `#rrggbb` / use the colour picker. Colours are adjusted automatically when they would be hard to read on your theme (WCAG AA: 4.5:1 for the name, 3:1 for icons and lines).
+- **Header and divider style** (#27): group headers plain, with a tinted background, or with a line above; the line beside grouped items can be hidden. Themes can restyle all of it with CSS variables (see the README).
+- **Collapse settings** (#28): "Groups start collapsed" (on every page load; folding is then not remembered), "One group open at a time" (opening a group folds the others), and an optional collapse / expand all button next to the sidebar title.
+- **A group that starts open** (#33, forum request): with "Groups start collapsed" on, an open folder button on each group row in the editor keeps that group open on every page load (with "One group open at a time": the first such group). Without "Groups start collapsed" each group keeps the state you left it in, as before.
+- **Rounded headers** (#34, forum request): a new group header style, "Rounded with background": pill-shaped headers a step lighter than the sidebar on dark themes (a step darker on light ones), tinted with the group's colour if it has one. Text, counts and icons on it are adjusted for contrast like the other styles; right-to-left, the icon-only rail and narrow screens included.
+- **Pinned icons at the bottom** (#29): drag items into the new "Pinned at the bottom" area of the editor to show them as a compact icon grid above Settings / Notifications, four per row. Names show as tooltips; in the icon-only sidebar they stack in the rail. Keyboard: arrow keys move through the grid (Down from the last row continues to Settings), Enter opens; in the editor Alt + Down from the last row pins an item. Screen readers hear each item's name and "Pinned". At most 20 pinned items.
+- With "One group open at a time" the collapse / expand all button only collapses (expanding all would open several groups); it is hidden while every group is folded.
+- Home Assistant's own "Edit sidebar" dialog: a new order there also re-sorts the pinned icons (they stay pinned), as it does for groups (#31).
+- Switching between light and dark (or another theme) with the page open updates the group colours right away (#30).
+- With the collapse / expand all button on, a Latin sidebar title in Hebrew is shortened at its end ("Home Assi..."), not its start (#32).
+- Layouts saved by earlier versions load unchanged, with the new options at their defaults. The server validates every new value (colour format, known options only, "starts open" true or false, at most 20 pinned items).
+
 ## v0.2.1 (2026-10-01)
 
 - Works with Home Assistant 2026.6, 2026.7 and 2026.8 (tested on 2026.6.4, 2026.7.4, 2026.8.3); the minimum version is now 2026.6.0.

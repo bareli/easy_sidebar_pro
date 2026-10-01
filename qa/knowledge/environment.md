@@ -59,3 +59,6 @@
     exists from 2026.8; its modal steals focus from the page (looked like a keyboard bug).
   - Smoke suite: `~/.claude/qa-playwright/espjs/compat.mjs` (PORT=…): status, render, fold, keyboard open ×5,
     list registration, drag-merge-save, HA order adoption.
+  - Seeded instances set the core language to Hebrew, so `qa_user` is Hebrew too. For an English user send, as that user,
+    `frontend/set_user_data` key `language` value `{"language": "en", "number_format": "language", "time_format": "language", "date_format": "language", "time_zone": "local", "first_weekday": "language"}` and reload.
+  - HA's fixed (bottom) list is 255 px wide in the expanded sidebar (the sidebar's 1 px border): grid cell widths must fit 255, not 256 (v0.3 pinned grid wrapped to 3 columns).
