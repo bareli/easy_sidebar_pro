@@ -86,3 +86,29 @@ Run in Hebrew (RTL) first, then English. Desktop 1440x900 and mobile 320x568 (dr
 ## SEC / PERF / A11Y / UX
 
 Owned by the specialists; IDs `SEC-nn`, `PERF-nn`, `A11Y-nn`, `UX-nn` are assigned when findings are filed.
+
+## Regression cases added by the 2026-10-01 cycle
+
+Each confirmed defect has a stable case. Automated coverage in brackets.
+
+- KBD-05 Pencil opens the editor with Enter and with Space (BUG-003 #24).
+- KBD-06 Enter in a group name keeps focus in the field; the next click (Done, Cancel, eye, Add group) works first time (BUG-004 #25, BUG-009 #6).
+- EDIT-13 Empty / invisible-only name: inline error tied to the field (`aria-invalid`, `aria-describedby`), Done refuses and focuses the field (BUG-005 #3).
+- EDIT-14 Names with C1 / Cf characters are cleaned or rejected identically by editor and server; legitimate Hebrew, Arabic, Persian ZWNJ, emoji ZWJ names pass (BUG-014 #11, SEC-002 #20) [tests_js/qa-regressions, tests/test_layout].
+- EDIT-15 Done with no changes closes without saving; a user on the default: hide/show-only Done keeps the default, structural change shows the one-time note then forks (UX-001 #12) [tests_js/ux-batch-c].
+- EDIT-16 Reset / Set default / Remove default ask inline and report the result (UX-004 #15).
+- EDIT-17 Save errors are short and localized (offline, validation) (UX-007 #18).
+- DND-10 Release outside the list with no indicator does nothing (BUG-011 #8).
+- DND-11 Drop on an empty group's placeholder fills that group (BUG-012 #9).
+- DND-12 Ghost does not cover the target; "onto" hover labels the new group (UX-003 #14).
+- MOBILE-02 Done/Cancel bar stays visible while scrolling the editor at 320x568 and on a short desktop (BUG-001 #1).
+- RND-09 Switching to icon-only updates group headers immediately (tooltip, folded marker) (BUG-002 #2).
+- PERSIST-07 Save keeps HA's native hidden/order entries for panels HA does not list right now (BUG-013 #10).
+- PERSIST-08 Open subscriptions follow a config-entry reload (BUG-010 #7) [tests/test_qa_regressions].
+- NATIVE-05 Reordering in HA's own dialog is adopted with groups kept; Reset rewrites HA's order (UX-002 #13) [tests_js/ux-batch-b].
+- NATIVE-06 After 10 editor open/close cycles, `ha-list-nav` items equal connected rows; ArrowDown visits each row once (PERF-003 #23).
+- WS-04 Validators: fullmatch, `version: true` rejected, URI-scheme icon prefixes rejected, caps checked before iterating (SEC-001 #19, PERF-001 #21) [tests/test_layout].
+- A11Y-07 Contrast ≥ 4.5:1 for editor text, links, errors, Done in light, dark and an orange theme (BUG-006 #4); name field boundary ≥ 3:1 (BUG-007 #5).
+- A11Y-08 List semantics: HA's list owns only listitems while editing; grouped panels describe their group (BUG-008 #26).
+- I18N-03 Hebrew wording "עריכת סרגל הצד" (UX-005 #16).
+- PERF-04 Editor in-place updates: hide toggle / rename create ≤ 5 nodes (PERF-002 #22).
