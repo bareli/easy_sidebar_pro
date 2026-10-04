@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.3.2 (2026-10-04)
 
 - The editor hint now mentions the eye button: it hides or shows an item in the sidebar (hidden items stay listed in the editor, dimmed).
 
