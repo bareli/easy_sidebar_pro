@@ -1,7 +1,7 @@
 // Pure layout model for Easy Sidebar Pro. No DOM, no Home Assistant.
 //
 // Layout (stored):  { version: 1, order: ["path" | "g:<id>"], groups: { id: { name, icon, color, icon_color, start_open, panels: [path] } },
-//                     grid: [path], settings: { start_collapsed, accordion, toggle_all, header, divider } }
+//                     grid: [path], settings: { start_collapsed, accordion, toggle_all, hide_count, header, divider } }
 // Tree (editing):   [ { type: "panel", path } | { type: "group", id, name, icon, color, icon_color, start_open, children: [panel nodes] } ]
 //                   The bottom grid is a group-like node with `pins: true` (id PINS_ID), always last.
 // Keys:             "p:<path>" for a panel, "g:<id>" for a group.
@@ -19,7 +19,7 @@ export const HEADER_STYLES = ["plain", "tinted", "line", "pill"];
 export const DIVIDER_STYLES = ["line", "none"];
 // Keys of a stored group, in the server's output order (const.py GROUP_KEYS).
 export const GROUP_KEYS = ["name", "icon", "color", "icon_color", "start_open", "panels"];
-export const DEFAULT_SETTINGS = Object.freeze({ start_collapsed: false, accordion: false, toggle_all: false, header: "plain", divider: "line" });
+export const DEFAULT_SETTINGS = Object.freeze({ start_collapsed: false, accordion: false, toggle_all: false, hide_count: false, header: "plain", divider: "line" });
 
 export const panelKey = (path) => `p:${path}`;
 export const groupKey = (id) => `g:${id}`;
@@ -91,7 +91,7 @@ export function toLayout(tree, settings) {
 export function cleanSettings(value) {
   const out = { ...DEFAULT_SETTINGS };
   if (!value || typeof value !== "object") return out;
-  for (const key of ["start_collapsed", "accordion", "toggle_all"]) if (typeof value[key] === "boolean") out[key] = value[key];
+  for (const key of ["start_collapsed", "accordion", "toggle_all", "hide_count"]) if (typeof value[key] === "boolean") out[key] = value[key];
   if (HEADER_STYLES.includes(value.header)) out.header = value.header;
   if (DIVIDER_STYLES.includes(value.divider)) out.divider = value.divider;
   return out;

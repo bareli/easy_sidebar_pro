@@ -16,7 +16,7 @@ const FORUM = {
     system: { name: "System", icon: null, color: null, icon_color: null, start_open: true, panels: ["calendar"] },
   },
   grid: ["logbook", "history"],
-  settings: { start_collapsed: true, accordion: true, toggle_all: false, header: "pill", divider: "line" },
+  settings: { start_collapsed: true, accordion: true, toggle_all: false, hide_count: false, header: "pill", divider: "line" },
 };
 
 test("#33 start_open round-trips through the tree; new groups and old layouts default to false", () => {

@@ -83,6 +83,7 @@ const STRINGS = {
     startOpen: "{name} opens on page load",
     accordion: "One group open at a time",
     toggleAllOption: "Collapse / expand all button next to the title",
+    hideCount: "Hide the number of items on folded groups",
     headerStyle: "Group headers",
     header_plain: "Plain",
     header_tinted: "Tinted background",
@@ -176,6 +177,7 @@ const STRINGS = {
     startOpen: "{name} נפתחת בטעינת הדף",
     accordion: "קבוצה אחת פתוחה בכל פעם",
     toggleAllOption: "כפתור קיפול ופתיחה של הכול ליד הכותרת",
+    hideCount: "הסתרת מספר הפריטים בקבוצות מקופלות",
     headerStyle: "כותרות הקבוצות",
     header_plain: "רגילות",
     header_tinted: "רקע צבעוני",
@@ -304,7 +306,7 @@ const GROUP_CSS = `
 :host { display: block; outline: none; margin-block-end: 4px; }
 .row {
   display: flex; align-items: center; gap: 12px; box-sizing: border-box;
-  min-height: 40px; padding-block: 4px; padding-inline: 12px 8px; margin-inline: 4px;
+  min-height: 40px; padding-block: 4px; padding-inline: 12px 8px; margin-inline: 4px; width: var(--esp-item-width, auto);
   border-radius: var(--esp-group-header-radius, var(--ha-border-radius-md, 8px)); cursor: pointer;
   color: var(--esp-own-color, var(--esp-group-header-text-color, var(--sidebar-text-color, var(--primary-text-color))));
   font-size: var(--ha-font-size-m, 14px); font-weight: var(--ha-font-weight-medium, 500);
@@ -370,8 +372,8 @@ class EspGroup extends HTMLElement {
     this.onToggle?.();
   }
 
-  /** look: { text, icon, bg, line, sub, sel, selIcon } CSS colours (null = theme default) and header (L.HEADER_STYLES). */
-  update(row, lang, iconOnly, rtl, look = null, header = "plain") {
+  /** look: { text, icon, bg, line, sub, sel, selIcon } CSS colours (null = theme default), header (L.HEADER_STYLES); hideCount drops the folded count (#36). */
+  update(row, lang, iconOnly, rtl, look = null, header = "plain", hideCount = false) {
     setVar(this, "--esp-own-color", look?.text);
     setVar(this, "--esp-own-icon-color", look?.icon);
     setVar(this, "--esp-own-bg", look?.bg);
@@ -383,7 +385,7 @@ class EspGroup extends HTMLElement {
     this._icon.icon = row.icon || DEFAULT_ICON;
     this._name.textContent = row.name;
     const count = row.count === 1 ? t(lang, "items1") : t(lang, "items", { n: row.count });
-    this._count.textContent = row.collapsed ? String(row.count) : "";
+    this._count.textContent = row.collapsed && !hideCount ? String(row.count) : "";
     this.toggleAttribute("collapsed", row.collapsed);
     this.toggleAttribute("selected", row.collapsed && row.selected);
     this.toggleAttribute("icon-only", iconOnly);
@@ -1048,6 +1050,7 @@ class EspEditor extends HTMLElement {
       check("start_collapsed", "startCollapsed", "startCollapsedHelp"),
       check("accordion", "accordion"),
       check("toggle_all", "toggleAllOption"),
+      check("hide_count", "hideCount"),
       select("header", "headerStyle", L.HEADER_STYLES),
       select("divider", "dividerStyle", L.DIVIDER_STYLES),
     );
@@ -1285,6 +1288,9 @@ const SIDEBAR_CSS = `
 .esp-probe { position: absolute; width: 0; height: 0; overflow: hidden; visibility: hidden; pointer-events: none; }
 :host([expanded]) ha-list-item-button[data-esp-group] { margin-inline-start: 18px; width: calc(var(--ha-sidebar-expanded-item-width, 248px) - 14px); }
 :host([narrow][expanded]) ha-list-item-button[data-esp-group] { width: calc(226px - var(--safe-area-inset-left, 0px)); }
+/* Group headers as wide as HA's own rows: 248 px expanded, 240 px in the narrow drawer (#37). */
+:host([expanded]) esp-group { --esp-item-width: var(--ha-sidebar-expanded-item-width, 248px); }
+:host([narrow][expanded]) esp-group { --esp-item-width: calc(240px - var(--safe-area-inset-left, 0px)); }
 :host([expanded]) ha-list-item-button[data-esp-group]::after { content: ""; position: absolute; inset-block: 0 -4px; inset-inline-start: -8px;
   width: var(--esp-group-divider-width, 2px); background: var(--esp-own-line, var(--esp-group-divider-color, var(--divider-color))); pointer-events: none; }
 :host([expanded]) ha-list-item-button[data-esp-last]::after { inset-block-end: 6px; border-end-end-radius: 1px; border-end-start-radius: 1px; }
@@ -1519,7 +1525,7 @@ class Controller {
         this.groupEls.set(r.id, el);
       }
       el.onToggle = () => this.toggle(r.id);
-      el.update(r, this.lang, iconOnly, rtl, this.groupLooks.get(r.id), this.settings.header);
+      el.update(r, this.lang, iconOnly, rtl, this.groupLooks.get(r.id), this.settings.header, this.settings.hide_count);
       return el;
     });
     for (const id of [...this.groupEls.keys()]) if (!used.has(id)) this.groupEls.delete(id);

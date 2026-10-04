@@ -31,7 +31,7 @@ test("#29 toLayout writes grid and settings; colours round-trip", () => {
   assert.deepEqual(out.order, ["home", "g:a", "map", "logbook"]);
   assert.equal(out.groups[PINS_ID], undefined);
   assert.deepEqual(out.groups.a, { name: "בית", icon: "mdi:home", color: "red", icon_color: "#00ff00", start_open: false, panels: ["todo", "calendar"] });
-  assert.deepEqual(out.settings, { start_collapsed: false, accordion: true, toggle_all: false, header: "plain", divider: "line" });
+  assert.deepEqual(out.settings, { start_collapsed: false, accordion: true, toggle_all: false, hide_count: false, header: "plain", divider: "line" });
   assert.deepEqual(flatten(buildTree(LAYOUT, PATHS)).at(-1), "energy");
 });
 
@@ -108,7 +108,7 @@ test("#28 collapse all / expand all", () => {
 });
 
 test("#28 settings: defaults for missing or invalid values; a settings change is a structure change", () => {
-  assert.deepEqual(cleanSettings(null), { start_collapsed: false, accordion: false, toggle_all: false, header: "plain", divider: "line" });
+  assert.deepEqual(cleanSettings(null), { start_collapsed: false, accordion: false, toggle_all: false, hide_count: false, header: "plain", divider: "line" });
   assert.deepEqual(cleanSettings({ accordion: 1, header: "bold", divider: "none", toggle_all: true }).divider, "none");
   assert.equal(cleanSettings({ accordion: 1 }).accordion, false);
   const base = buildTree(LAYOUT, PATHS, true);

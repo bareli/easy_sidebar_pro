@@ -39,7 +39,7 @@ test("toLayout round trip and flatten", () => {
     order: [...LAYOUT.order, "media-browser"],
     groups: { home: { name: "בית", icon: "mdi:home", color: null, icon_color: null, start_open: false, panels: ["calendar", "todo"] } },
     grid: [],
-    settings: { start_collapsed: false, accordion: false, toggle_all: false, header: "plain", divider: "line" },
+    settings: { start_collapsed: false, accordion: false, toggle_all: false, hide_count: false, header: "plain", divider: "line" },
   });
   assert.deepEqual(flatten(tree), ["lovelace", "calendar", "todo", "map", "media-browser"]);
 });

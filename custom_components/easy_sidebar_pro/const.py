@@ -32,6 +32,7 @@ DEFAULT_SETTINGS = {
     "start_collapsed": False,
     "accordion": False,
     "toggle_all": False,
+    "hide_count": False,
     "header": "plain",
     "divider": "line",
 }

@@ -45,7 +45,7 @@ the same layout to every user who has not made their own.
 - **Collapse settings** (editor, **Display**): groups start collapsed on every page load; only one group
   open at a time; a collapse / expand all button next to the sidebar title (off by default, because it
   shortens the title). With "one group open at a time" the button only collapses, and is hidden while every
-  group is folded.
+  group is folded. The number of items on folded group headers can be hidden.
 - **A group that starts open**: with "Groups start collapsed" on, each group row in the editor gets an
   open folder button. Groups with it pressed start open on every page load, the rest start folded. With
   "One group open at a time" only the first of them (top to bottom) opens.

@@ -1,6 +1,13 @@
 # Changelog
 
-## v0.3.0 (unreleased)
+## v0.3.1 (2026-10-04)
+
+Forum feedback on v0.3.0.
+
+- **Hide the item count** (#36, forum request): new option under **Display** in the editor, "Hide the number of items on folded groups". Screen readers still hear the count.
+- **Narrow screens** (#37, forum report): on phones and other narrow screens, group headers were 8 px wider than Home Assistant's own rows, so the highlighted page looked shorter than the headers next to it (most visible with "Rounded with background"). Headers now have the same width as the rows in every style.
+
+## v0.3.0 (2026-10-01)
 
 Styling, collapse settings and a bottom grid, for parity with Sidebar Organizer (forum request). Everything is set in the sidebar editor and saved with the layout, so it follows each user and the admin default.
 
