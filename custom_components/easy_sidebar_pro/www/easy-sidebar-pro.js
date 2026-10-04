@@ -136,7 +136,7 @@ const STRINGS = {
     movedGroup: "{name}: in {group}, position {pos}",
     grouped: "Group created with {a} and {b}",
     nameRequired: "Enter a group name",
-    hint: "Drag a row onto another row to make a group.",
+    hint: "Drag a row onto another row to make a group. The eye button hides or shows an item.",
   },
   he: {
     edit: "עריכת סרגל הצד",
@@ -230,7 +230,7 @@ const STRINGS = {
     movedGroup: "{name}: בקבוצה {group}, מקום {pos}",
     grouped: "נוצרה קבוצה עם {a} ועם {b}",
     nameRequired: "צריך שם לקבוצה",
-    hint: "גררו שורה אל שורה אחרת כדי ליצור קבוצה.",
+    hint: "גררו שורה אל שורה אחרת כדי ליצור קבוצה. כפתור העין מסתיר או מציג פריט.",
   },
 };
 

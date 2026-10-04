@@ -30,3 +30,8 @@ test("#37 group header rows take HA's item width: 248 px expanded, 240 px in the
   assert.match(SRC, /:host\(\[expanded\]\) esp-group \{ --esp-item-width: var\(--ha-sidebar-expanded-item-width, 248px\); \}/);
   assert.match(SRC, /:host\(\[narrow\]\[expanded\]\) esp-group \{ --esp-item-width: calc\(240px - var\(--safe-area-inset-left, 0px\)\); \}/);
 });
+
+test("editor hint names the eye button (hide / show), both languages", () => {
+  assert.match(SRC, /hint: "Drag a row onto another row to make a group\. The eye button hides or shows an item\.",/);
+  assert.match(SRC, /hint: "גררו שורה אל שורה אחרת כדי ליצור קבוצה\. כפתור העין מסתיר או מציג פריט\.",/);
+});
