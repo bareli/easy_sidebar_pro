@@ -30,7 +30,7 @@ test("#29 toLayout writes grid and settings; colours round-trip", () => {
   assert.deepEqual(out.grid, ["energy"]);
   assert.deepEqual(out.order, ["home", "g:a", "map", "logbook"]);
   assert.equal(out.groups[PINS_ID], undefined);
-  assert.deepEqual(out.groups.a, { name: "בית", icon: "mdi:home", color: "red", icon_color: "#00ff00", start_open: false, panels: ["todo", "calendar"] });
+  assert.deepEqual(out.groups.a, { name: "בית", icon: "mdi:home", color: "red", icon_color: "#00ff00", start_open: false, tabbed: false, panels: ["todo", "calendar"] });
   assert.deepEqual(out.settings, { start_collapsed: false, accordion: true, toggle_all: false, hide_count: false, header: "plain", divider: "line" });
   assert.deepEqual(flatten(buildTree(LAYOUT, PATHS)).at(-1), "energy");
 });

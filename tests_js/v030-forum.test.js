@@ -68,7 +68,7 @@ test("#34 pill is a header style on both sides; settings keep it", () => {
   assert.equal(L.cleanSettings({ header: "Pill" }).header, "plain");
   const py = fs.readFileSync(new URL("../custom_components/easy_sidebar_pro/const.py", import.meta.url), "utf8");
   assert.match(py, /HEADER_STYLES = \("plain", "tinted", "line", "pill"\)/);
-  assert.match(py, /GROUP_KEYS = \("name", "icon", "color", "icon_color", "start_open", "panels"\)/);
+  assert.match(py, /GROUP_KEYS = \("name", "icon", "color", "icon_color", "start_open", "tabbed", "panels"\)/);
 });
 
 test("#34 pill background: lighter on dark themes, darker on light ones, group colour tinted; text stays readable", () => {

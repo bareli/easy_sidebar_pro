@@ -36,7 +36,7 @@ def test_old_layout_gets_defaults():
     """A v0.1 / v0.2 layout (no colours, grid or settings) loads with the defaults."""
     old = {"version": 1, "order": ["g:a", "map"], "groups": {"a": {"name": "A", "icon": None, "panels": ["todo"]}}}
     out = validate_layout(old)
-    assert out["groups"]["a"] == {"name": "A", "icon": None, "color": None, "icon_color": None, "start_open": False, "panels": ["todo"]}
+    assert out["groups"]["a"] == {"name": "A", "icon": None, "color": None, "icon_color": None, "start_open": False, "tabbed": False, "panels": ["todo"]}
     assert out["grid"] == []
     assert out["settings"] == DEFAULT_SETTINGS
     assert validate_layout(out) == out

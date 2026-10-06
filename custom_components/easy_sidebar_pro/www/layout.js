@@ -1,9 +1,10 @@
 // Pure layout model for Easy Sidebar Pro. No DOM, no Home Assistant.
 //
-// Layout (stored):  { version: 1, order: ["path" | "g:<id>"], groups: { id: { name, icon, color, icon_color, start_open, panels: [path] } },
+// Layout (stored):  { version: 1, order: ["path" | "g:<id>"], groups: { id: { name, icon, color, icon_color, start_open, tabbed, panels: [path] } },
 //                     grid: [path], settings: { start_collapsed, accordion, toggle_all, hide_count, header, divider } }
-// Tree (editing):   [ { type: "panel", path } | { type: "group", id, name, icon, color, icon_color, start_open, children: [panel nodes] } ]
+// Tree (editing):   [ { type: "panel", path } | { type: "group", id, name, icon, color, icon_color, start_open, tabbed, children: [panel nodes] } ]
 //                   The bottom grid is a group-like node with `pins: true` (id PINS_ID), always last.
+//                   A `tabbed` group is one sidebar row; its panels open as tabs of one page.
 // Keys:             "p:<path>" for a panel, "g:<id>" for a group.
 
 export const GROUP_PREFIX = "g:";
@@ -18,7 +19,7 @@ export const NAMED_COLORS = ["primary", "accent", "red", "pink", "purple", "indi
 export const HEADER_STYLES = ["plain", "tinted", "line", "pill"];
 export const DIVIDER_STYLES = ["line", "none"];
 // Keys of a stored group, in the server's output order (const.py GROUP_KEYS).
-export const GROUP_KEYS = ["name", "icon", "color", "icon_color", "start_open", "panels"];
+export const GROUP_KEYS = ["name", "icon", "color", "icon_color", "start_open", "tabbed", "panels"];
 export const DEFAULT_SETTINGS = Object.freeze({ start_collapsed: false, accordion: false, toggle_all: false, hide_count: false, header: "plain", divider: "line" });
 
 export const panelKey = (path) => `p:${path}`;
@@ -26,8 +27,8 @@ export const groupKey = (id) => `g:${id}`;
 export const keyOf = (node) => (node.type === "group" ? groupKey(node.id) : panelKey(node.path));
 
 export const isPins = (node) => node?.type === "group" && node.id === PINS_ID;
-export const pinsNode = (children = []) => ({ type: "group", id: PINS_ID, pins: true, name: "", icon: null, color: null, icon_color: null, start_open: false, children });
-const newGroup = (id, name, children) => ({ type: "group", id, name, icon: null, color: null, icon_color: null, start_open: false, children });
+export const pinsNode = (children = []) => ({ type: "group", id: PINS_ID, pins: true, name: "", icon: null, color: null, icon_color: null, start_open: false, tabbed: false, children });
+const newGroup = (id, name, children) => ({ type: "group", id, name, icon: null, color: null, icon_color: null, start_open: false, tabbed: false, children });
 
 /**
  * Build the tree from a layout and HA's panel paths (in HA's order). Pinned panels (`grid`) go to
@@ -51,7 +52,7 @@ export function buildTree(layout, paths, withPins = false) {
       if (!g || id === PINS_ID || tree.some((n) => n.type === "group" && n.id === id)) continue;
       const children = [];
       for (const p of g.panels ?? []) if (typeof p === "string" && !placed.has(p)) children.push(panel(p));
-      tree.push({ type: "group", id, name: g.name, icon: g.icon ?? null, color: g.color ?? null, icon_color: g.icon_color ?? null, start_open: g.start_open === true, children });
+      tree.push({ type: "group", id, name: g.name, icon: g.icon ?? null, color: g.color ?? null, icon_color: g.icon_color ?? null, start_open: g.start_open === true, tabbed: g.tabbed === true, children });
     } else if (!placed.has(entry)) {
       tree.push(panel(entry));
     }
@@ -78,6 +79,7 @@ export function toLayout(tree, settings) {
         color: n.color ?? null,
         icon_color: n.icon_color ?? null,
         start_open: n.start_open === true,
+        tabbed: n.tabbed === true,
         panels: n.children.map((c) => c.path),
       };
     } else {
@@ -116,7 +118,8 @@ export function flatten(tree) {
 /**
  * Rows to show in the (non-edit) sidebar.
  * visible: panel paths HA shows, in HA's order. Groups without a visible panel are left out;
- * a collapsed group lists no panels and says whether it holds the selected one.
+ * a collapsed group lists no panels and says whether it holds the selected one. A tabbed group is one
+ * row (`tabbed: true`, never collapsed) with its visible panels in `paths`.
  */
 export function arrange(layout, visible, collapsed, selected) {
   const tree = buildTree(layout, visible);
@@ -131,7 +134,8 @@ export function arrange(layout, visible, collapsed, selected) {
     if (isPins(n)) continue;
     const kids = n.children.filter((c) => shown.has(c.path));
     if (!kids.length) continue;
-    const isCollapsed = folded.has(n.id);
+    const tabbed = n.tabbed === true;
+    const isCollapsed = !tabbed && folded.has(n.id);
     rows.push({
       type: "group",
       id: n.id,
@@ -142,11 +146,27 @@ export function arrange(layout, visible, collapsed, selected) {
       collapsed: isCollapsed,
       count: kids.length,
       selected: kids.some((c) => c.path === selected),
+      tabbed,
+      paths: kids.map((c) => c.path),
     });
-    if (!isCollapsed) kids.forEach((c, i) => rows.push({ type: "panel", path: c.path, group: n.id, last: i === kids.length - 1 }));
+    if (!isCollapsed && !tabbed) kids.forEach((c, i) => rows.push({ type: "panel", path: c.path, group: n.id, last: i === kids.length - 1 }));
   }
   return rows;
 }
+
+/**
+ * The tabbed group whose visible panels include `selected` (the tab strip above the page), or null:
+ * { id, name, icon, paths } with `paths` in the group's order.
+ */
+export function tabsFor(layout, visible, selected) {
+  if (!selected) return null;
+  for (const r of arrange(layout, visible, [], selected))
+    if (r.type === "group" && r.tabbed && r.selected) return { id: r.id, name: r.name, icon: r.icon ?? null, paths: r.paths };
+  return null;
+}
+
+/** Where a click on a tabbed row goes: the tab last open in this page when still shown, else the first. */
+export const tabTarget = (paths, last) => (last && paths.includes(last) ? last : paths[0] ?? null);
 
 const clone = (tree) => tree.map((n) => (n.type === "group" ? { ...n, children: [...n.children] } : n));
 
