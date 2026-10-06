@@ -3,6 +3,7 @@
 ## v0.4.1 (2026-10-06)
 
 - Editor: the group name had almost no room next to the new tabs button, so it could not be read or edited. The name now has the whole row; **Tabs**, **Starts open** and **Ungroup** are labelled buttons on a line under it.
+- Editor: **Display options** (groups start collapsed, one group open at a time, search box, header style...) moved from the bottom of the editor to the top, right under Done / Cancel, folded until you open them. A note there says changes apply when you press Done.
 
 ## v0.4.0 (2026-10-06)
 

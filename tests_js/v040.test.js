@@ -178,3 +178,12 @@ test("search box: kept across renders, first in the list, gone in the rail; keys
   assert.match(SRC, /user-select: text; -webkit-user-select: text; \}\r?\n:host\(\[icon-only\]\)/);
   assert.match(SRC, /if \(LIST_KEYS\.has\(e\.key\) \|\| e\.key === "Escape"\) e\.stopPropagation\(\);/);
 });
+
+test("v0.4.1 editor: group name has the head row; options labelled below; display options at the top", () => {
+  // Head row: handle, icon, name only.
+  assert.match(SRC, /\{ class: "row head", "data-key": key \},\s+this\.handle\(key, node\.name\),\s+h\(\s+"button",[\s\S]*?iconEl\(node\.icon \|\| DEFAULT_ICON\),\s+\),\s+input,\s+\);/);
+  assert.match(SRC, /class: "opt ungroup-btn"/);
+  for (const key of ["optUngroup", "displayNote"]) assert.equal(SRC.match(new RegExp(`^    ${key}: "`, "gm"))?.length, 2, key);
+  assert.match(SRC, /this\._content\.replaceChildren\(bar, settings, add, list, /);
+  assert.match(SRC, /"details",\s+\{ class: "settings", "\.open": this\.displayOpen === true/);
+});

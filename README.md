@@ -38,11 +38,11 @@ the same layout to every user who has not made their own.
 - **Colours and styles**: open a group's icon in the editor to give it a colour (its name and the line
   beside its items) and an icon colour. Choose one of Home Assistant's theme colours, which follow your
   theme in light and dark mode, or any `#rrggbb` colour. If a colour would be hard to read on your theme
-  it is darkened or lightened just enough (WCAG AA). Under **Display** in the editor: group headers plain,
+  it is darkened or lightened just enough (WCAG AA). Under **Display options** in the editor: group headers plain,
   with a tinted background, with a line above, or **rounded with background** (a pill a step lighter than
   the sidebar on dark themes and a step darker on light ones, tinted with the group's colour if it has one),
   and the line beside grouped items shown or hidden.
-- **Collapse settings** (editor, **Display**): groups start collapsed on every page load; only one group
+- **Collapse settings** (editor, **Display options**): groups start collapsed on every page load; only one group
   open at a time; a collapse / expand all button next to the sidebar title (off by default, because it
   shortens the title). With "one group open at a time" the button only collapses, and is hidden while every
   group is folded. The number of items on folded group headers can be hidden.
@@ -63,7 +63,7 @@ the same layout to every user who has not made their own.
   page, one per item of the group. The pages are Home Assistant's own, unchanged; the group's row is
   highlighted while any of them is open. A dashboard with several views keeps its own view tabs below the
   bar. Hidden items are not tabs.
-- **Search box** (editor, **Display**, off by default): type part of a name at the top of the sidebar to
+- **Search box** (editor, **Display options**, off by default): type part of a name at the top of the sidebar to
   see only the items whose names contain it (any case), with their groups unfolded. A tabs group shows as
   its one row if its name or any of its items match. Enter opens the first result, Escape clears.
 - **No flicker**: groups are drawn as part of Home Assistant's own sidebar, not patched in afterwards.

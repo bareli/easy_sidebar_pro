@@ -94,7 +94,8 @@ const STRINGS = {
     c_orange: "Orange",
     c_brown: "Brown",
     c_grey: "Grey",
-    display: "Display",
+    display: "Display options",
+    displayNote: "Changes apply when you press Done.",
     startCollapsed: "Groups start collapsed",
     startCollapsedHelp: "On every page load, except groups whose open folder button is on (with one group open at a time: the first of them). Folding is then not remembered.",
     startOpen: "{name} opens on page load",
@@ -196,7 +197,8 @@ const STRINGS = {
     c_orange: "כתום",
     c_brown: "חום",
     c_grey: "אפור",
-    display: "תצוגה",
+    display: "אפשרויות תצוגה",
+    displayNote: "השינויים נשמרים בלחיצה על סיום.",
     startCollapsed: "הקבוצות מתחילות מקופלות",
     startCollapsedHelp: "בכל טעינה של הדף, חוץ מקבוצות שכפתור התיקייה הפתוחה שלהן מופעל (כשרק קבוצה אחת פתוחה: הראשונה מהן). קיפול של קבוצה לא נשמר.",
     startOpen: "{name} נפתחת בטעינת הדף",
@@ -565,7 +567,16 @@ button { font: inherit; color: inherit; }
 .pins .head-icon { width: 22px; height: 22px; flex: none; fill: currentColor; color: var(--sidebar-icon-color, var(--secondary-text-color)); }
 .pins .count { color: var(--secondary-text-color); font-size: var(--ha-font-size-s, 12px); padding-inline-end: 8px; font-variant-numeric: tabular-nums; }
 .pins .note { padding: 4px 12px 0; }
-.settings { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px 4px; border-top: 1px solid var(--divider-color); margin-top: 6px; }
+/* Display options: right under Done / Cancel, folded until opened (kept open across re-renders). */
+.settings { border-bottom: 1px solid var(--divider-color); }
+.settings > summary { display: flex; align-items: center; min-height: 40px; padding: 0 12px; cursor: pointer; color: var(--esp-action-color);
+  font-weight: var(--ha-font-weight-medium, 500); user-select: none; -webkit-user-select: none; }
+.settings > summary::-webkit-details-marker { display: none; }
+.settings > summary .chev { width: 20px; height: 20px; margin-inline-start: auto; fill: currentColor; transition: transform 0.15s; }
+.settings[open] > summary .chev { transform: rotate(180deg); }
+@media (prefers-reduced-motion: reduce) { .settings > summary .chev { transition: none; } }
+.settings > summary:focus-visible { outline: 2px solid var(--primary-color); outline-offset: -2px; }
+.settings-body { display: flex; flex-direction: column; gap: 6px; padding: 0 12px 10px; }
 .check { display: flex; align-items: center; gap: 10px; min-height: 36px; cursor: pointer; line-height: 1.3; }
 .check input { flex: none; width: 18px; height: 18px; margin: 0; accent-color: var(--esp-fill-color); cursor: pointer; }
 .check + .note { margin: -6px 0 2px; padding-inline-start: 28px; }
@@ -817,7 +828,7 @@ class EspEditor extends HTMLElement {
         ),
       );
 
-    this._content.replaceChildren(bar, add, list, settings, footer.childElementCount ? footer : "");
+    this._content.replaceChildren(bar, settings, add, list, footer.childElementCount ? footer : "");
 
     if (focusKey) {
       const el = root.querySelector(`[data-focus-key="${CSS.escape(focusKey)}"]`);
@@ -1138,16 +1149,21 @@ class EspEditor extends HTMLElement {
         ),
       );
     return h(
-      "div",
-      { class: "settings", role: "group", "aria-labelledby": "esp-display" },
-      h("div", { class: "footer-heading", id: "esp-display" }, t(lang, "display")),
-      check("start_collapsed", "startCollapsed", "startCollapsedHelp"),
-      check("accordion", "accordion"),
-      check("toggle_all", "toggleAllOption"),
-      check("hide_count", "hideCount"),
-      check("search", "searchOption"),
-      select("header", "headerStyle", L.HEADER_STYLES),
-      select("divider", "dividerStyle", L.DIVIDER_STYLES),
+      "details",
+      { class: "settings", ".open": this.displayOpen === true, ontoggle: (e) => (this.displayOpen = e.target.open) },
+      h("summary", { id: "esp-display", "data-focus-key": "display" }, t(lang, "display"), svg(ICONS.chevron, "chev")),
+      h(
+        "div",
+        { class: "settings-body", role: "group", "aria-labelledby": "esp-display" },
+        h("div", { class: "note" }, t(lang, "displayNote")),
+        check("start_collapsed", "startCollapsed", "startCollapsedHelp"),
+        check("accordion", "accordion"),
+        check("toggle_all", "toggleAllOption"),
+        check("hide_count", "hideCount"),
+        check("search", "searchOption"),
+        select("header", "headerStyle", L.HEADER_STYLES),
+        select("divider", "dividerStyle", L.DIVIDER_STYLES),
+      ),
     );
   }
 
