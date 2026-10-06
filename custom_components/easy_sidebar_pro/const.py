@@ -33,6 +33,7 @@ DEFAULT_SETTINGS = {
     "accordion": False,
     "toggle_all": False,
     "hide_count": False,
+    "search": False,
     "header": "plain",
     "divider": "line",
 }

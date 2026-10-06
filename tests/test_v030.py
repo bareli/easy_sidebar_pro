@@ -19,7 +19,7 @@ FULL: dict[str, Any] = {
         "home": {"name": "בית", "icon": "mdi:home", "color": "#E91E63", "icon_color": "teal", "panels": ["calendar", "todo"]},
     },
     "grid": ["energy", "logbook"],
-    "settings": {"start_collapsed": True, "accordion": True, "toggle_all": True, "hide_count": True, "header": "tinted", "divider": "none"},
+    "settings": {"start_collapsed": True, "accordion": True, "toggle_all": True, "hide_count": True, "search": True, "header": "tinted", "divider": "none"},
 }
 
 

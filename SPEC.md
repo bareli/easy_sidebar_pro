@@ -208,5 +208,12 @@ edited in the in-sidebar editor, validated by `layout.py` and mirrored in `layou
   containing block of the panels' `position: fixed` headers), `--ha-sidebar-width: 0px`,
   `--ha-top-app-bar-width: 100%`, `--safe-area-inset-top: 0px`; all removed when the strip goes. Checked after
   every sidebar update; HA rebuilding its main view (narrow / wide) brings a new sidebar and controller.
+- Search (`settings.search`, boolean, default false): `<esp-search>` first in the panel list (one element per
+  sidebar, keeps focus), not in the icon-only rail (there the full list shows; the query returns on expand).
+  `searchRows`: names as shown (`panelTitle`), NFKD, marks dropped, lower case, substring. Panel: its name.
+  Group: unfolded with matching members (all when the group name matches), clicks do not fold. Tabbed group:
+  its one row when its name or a member matches; `match` = first matching member (Enter / click opens it).
+  Enter = first result, Down = `focusItemAtIndex(0)`, Escape clears; list keys and Escape stop at the box.
+  Query lives in the page only. Pinned icons are not filtered.
 - Pages are HA's own: no iframe, no panel created by us. A dashboard with several views shows its own view
   tabs under the strip (two levels, styled apart).

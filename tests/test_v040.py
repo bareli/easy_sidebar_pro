@@ -30,3 +30,12 @@ def test_tabbed_must_be_boolean(value):
 def test_tabbed_in_group_keys_before_panels():
     assert GROUP_KEYS.index("tabbed") == GROUP_KEYS.index("panels") - 1
     assert list(validate_layout(FULL)["groups"]["home"]) == list(GROUP_KEYS)
+
+
+def test_search_setting_validated_and_defaulted():
+    from custom_components.easy_sidebar_pro.layout import validate_settings
+
+    assert validate_settings(None)["search"] is False
+    assert validate_settings({"search": True})["search"] is True
+    with pytest.raises(LayoutError, match=r"settings\.search: must be true or false"):
+        validate_settings({"search": "yes"})

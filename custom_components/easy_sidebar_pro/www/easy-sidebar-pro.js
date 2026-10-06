@@ -21,6 +21,8 @@ const ICONS = {
   collapseAll: "M16.59,5.41L15.17,4L12,7.17L8.83,4L7.41,5.41L12,10M7.41,18.59L8.83,20L12,16.83L15.17,20L16.58,18.59L12,14L7.41,18.59Z",
   expandAll: "M12,18.17L8.83,15L7.42,16.41L12,21L16.59,16.41L15.17,15M12,5.83L15.17,9L16.58,7.59L12,3L7.41,7.59L8.83,9L12,5.83Z",
   tabs: "M21,3H3A2,2 0 0,0 1,5V19A2,2 0 0,0 3,21H21A2,2 0 0,0 23,19V5A2,2 0 0,0 21,3M21,19H3V5H13V9H21V19Z",
+  search: "M9.5,3A6.5,6.5 0 0,1 16,9.5C16,11.11 15.41,12.59 14.44,13.73L14.71,14H15.5L20.5,19L19,20.5L14,15.5V14.71L13.73,14.44C12.59,15.41 11.11,16 9.5,16A6.5,6.5 0 0,1 3,9.5A6.5,6.5 0 0,1 9.5,3M9.5,5C7,5 5,7 5,9.5C5,12 7,14 9.5,14C12,14 14,12 14,9.5C14,7 12,5 9.5,5Z",
+  close: "M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z",
   folderOpen: "M6.1,10L4,18V8H21A2,2 0 0,0 19,6H12L10,4H4A2,2 0 0,0 2,6V18A2,2 0 0,0 4,20H19C19.9,20 20.7,19.4 20.9,18.5L23.2,10H6.1M19,18H6L7.6,12H20.6L19,18Z",
 };
 
@@ -100,6 +102,10 @@ const STRINGS = {
     accordion: "One group open at a time",
     toggleAllOption: "Collapse / expand all button next to the title",
     hideCount: "Hide the number of items on folded groups",
+    searchOption: "Search box at the top of the sidebar",
+    search: "Search the sidebar",
+    searchClear: "Clear the search",
+    searchNone: "No matching items",
     headerStyle: "Group headers",
     header_plain: "Plain",
     header_tinted: "Tinted background",
@@ -195,6 +201,10 @@ const STRINGS = {
     accordion: "קבוצה אחת פתוחה בכל פעם",
     toggleAllOption: "כפתור קיפול ופתיחה של הכול ליד הכותרת",
     hideCount: "הסתרת מספר הפריטים בקבוצות מקופלות",
+    searchOption: "תיבת חיפוש בראש סרגל הצד",
+    search: "חיפוש בסרגל הצד",
+    searchClear: "ניקוי החיפוש",
+    searchNone: "אין פריטים מתאימים",
     headerStyle: "כותרות הקבוצות",
     header_plain: "רגילות",
     header_tinted: "רקע צבעוני",
@@ -1115,6 +1125,7 @@ class EspEditor extends HTMLElement {
       check("accordion", "accordion"),
       check("toggle_all", "toggleAllOption"),
       check("hide_count", "hideCount"),
+      check("search", "searchOption"),
       select("header", "headerStyle", L.HEADER_STYLES),
       select("divider", "dividerStyle", L.DIVIDER_STYLES),
     );
@@ -1342,6 +1353,95 @@ class EspEditor extends HTMLElement {
   }
 }
 
+/* ------------------------------------------------------------------ search box */
+
+// HA's sidebar is user-select: none; the field needs a caret. The box takes HA's item width.
+const SEARCH_CSS = `
+:host { display: block; margin: 0 4px 6px; width: var(--esp-item-width, auto); box-sizing: border-box; user-select: text; -webkit-user-select: text; }
+:host([icon-only]) { display: none; }
+.box { display: flex; align-items: center; gap: 8px; height: 40px; box-sizing: border-box; padding-inline: 12px 4px;
+  border-radius: var(--ha-border-radius-md, 8px); background: rgba(var(--rgb-primary-text-color, 0,0,0), 0.06);
+  color: var(--sidebar-text-color, var(--primary-text-color)); }
+.box:focus-within { outline: 2px solid var(--primary-color); outline-offset: -2px; }
+.glass { width: 20px; height: 20px; flex: none; fill: currentColor; color: var(--sidebar-icon-color, var(--secondary-text-color)); }
+input { flex: 1; min-width: 0; border: none; background: none; outline: none; font: inherit; font-size: var(--ha-font-size-m, 14px); color: inherit; padding: 0; }
+input::placeholder { color: var(--secondary-text-color); opacity: 1; }
+input::-webkit-search-cancel-button { display: none; }
+.clear { flex: none; width: 32px; height: 32px; display: grid; place-items: center; border: none; background: none; border-radius: 50%;
+  cursor: pointer; color: var(--secondary-text-color); padding: 0; }
+.clear[hidden] { display: none; }
+.clear svg { width: 18px; height: 18px; fill: currentColor; }
+.clear:hover { background: rgba(127,127,127,0.15); }
+.clear:focus-visible { outline: 2px solid var(--primary-color); }
+.none { padding: 8px 12px 0; color: var(--secondary-text-color); font-size: var(--ha-font-size-s, 12px); }
+.none:empty { display: none; }
+`;
+
+class EspSearch extends HTMLElement {
+  constructor() {
+    super();
+    const root = this.attachShadow({ mode: "open" });
+    const style = h("style");
+    style.textContent = SEARCH_CSS;
+    this._input = h("input", {
+      type: "search",
+      autocomplete: "off",
+      spellcheck: "false",
+      enterkeyhint: "go",
+      dir: "auto",
+      oninput: (e) => this.onQuery?.(e.target.value),
+      onkeydown: (e) => this._key(e),
+    });
+    this._clear = h("button", { class: "clear", type: "button", hidden: true, onclick: () => this.clear() }, svg(ICONS.close));
+    this._none = h("div", { class: "none", role: "status" });
+    root.append(style, h("div", { class: "box" }, svg(ICONS.search, "glass"), this._input, this._clear), this._none);
+  }
+
+  connectedCallback() {
+    // A child of HA's panel list (role=list), which may own only list items.
+    this.setAttribute("role", "listitem");
+  }
+
+  /**
+   * Enter opens the first result, Down moves into the results, Escape clears. The list's own keys stay
+   * here (HA's list would take them for its rows); every other key still reaches HA.
+   */
+  _key(e) {
+    if (e.key === "Escape" && this._input.value) {
+      e.preventDefault();
+      this.clear();
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      this.onEnter?.();
+    } else if (e.key === "ArrowDown") {
+      e.preventDefault();
+      this.onDown?.();
+    }
+    if (LIST_KEYS.has(e.key) || e.key === "Escape") e.stopPropagation();
+  }
+
+  clear() {
+    this._input.value = "";
+    this.onQuery?.("");
+    this._input.focus();
+  }
+
+  update(query, lang, iconOnly, found) {
+    if (this._input.value !== query) this._input.value = query;
+    const label = t(lang, "search");
+    if (this._input.placeholder !== label) {
+      this._input.placeholder = label;
+      this._input.setAttribute("aria-label", label);
+      this._clear.setAttribute("aria-label", t(lang, "searchClear"));
+      this._clear.title = t(lang, "searchClear");
+    }
+    this._clear.hidden = !query;
+    const none = query.trim() && !found ? t(lang, "searchNone") : "";
+    if (this._none.textContent !== none) this._none.textContent = none;
+    this.toggleAttribute("icon-only", iconOnly);
+  }
+}
+
 /* ------------------------------------------------------------------ tab strip (tabbed groups) */
 
 // Above the page (slotted into HA's drawer before the panel): a second level, styled apart from HA's
@@ -1413,6 +1513,7 @@ class EspTabs extends HTMLElement {
 customElements.get("esp-group") || customElements.define("esp-group", EspGroup);
 customElements.get("esp-editor") || customElements.define("esp-editor", EspEditor);
 customElements.get("esp-tabs") || customElements.define("esp-tabs", EspTabs);
+customElements.get("esp-search") || customElements.define("esp-search", EspSearch);
 
 /* ------------------------------------------------------------------ controller (one per ha-sidebar) */
 
@@ -1492,6 +1593,10 @@ class Controller {
     this.byPath = new Map();
     this.visible = [];
     this.selected = null;
+    // The sidebar search (this page only): what is typed, the box, the rows it gave.
+    this.query = "";
+    this.searchEl = null;
+    this.rows = [];
     // Until our layout arrives, show an empty list rather than flashing the flat one.
     this.holdUntil = Date.now() + HOLD_MS;
     this.holdTimer = setTimeout(() => this.refresh(), HOLD_MS);
@@ -1647,14 +1752,20 @@ class Controller {
     }
     this.pinPaths = L.pinned(layout, visible);
     this.pinPanels = this.pinPaths.map((p) => byPath.get(p));
-    const rows = L.arrange(layout, visible, this.collapsed, selected);
+    // HA reflects `expanded` from `alwaysExpand` in updated(), i.e. after this render: read the property.
+    const iconOnly = typeof this.sb.alwaysExpand === "boolean" ? !this.sb.alwaysExpand : !this.sb.hasAttribute("expanded");
+    if (!this.settings.search) this.query = "";
+    // The icon-only rail has no box: it shows everything, and the query is back when the sidebar expands.
+    const searching = this.settings.search && !iconOnly && !!this.query.trim();
+    const rows = searching
+      ? L.searchRows(layout, visible, new Map(panels.map((p) => [p.url_path, panelTitle(this.hass, p)])), this.query, selected)
+      : L.arrange(layout, visible, this.collapsed, selected);
+    this.rows = rows;
     this.rowGroups = new Map(rows.filter((r) => r.type === "panel").map((r) => [r.path, r.group]));
     // Folding (accordion, collapse all) is about the groups that fold: a tabbed group is a single row.
     this.groupNames = new Map(rows.filter((r) => r.type === "group" && !r.tabbed).map((r) => [r.id, r.name]));
     this.groupLooks = new Map(rows.filter((r) => r.type === "group").map((r) => [r.id, this.look(r.color, r.icon_color, this.settings.header)]));
     this.lastInGroup = new Set(rows.filter((r) => r.type === "panel" && r.last).map((r) => r.path));
-    // HA reflects `expanded` from `alwaysExpand` in updated(), i.e. after this render: read the property.
-    const iconOnly = typeof this.sb.alwaysExpand === "boolean" ? !this.sb.alwaysExpand : !this.sb.hasAttribute("expanded");
     // HA sets the page direction on <html dir>; reading it avoids a style recalculation per render.
     const dir = document.documentElement.dir;
     const rtl = dir ? dir === "rtl" : getComputedStyle(this.sb).direction === "rtl";
@@ -1667,12 +1778,37 @@ class Controller {
         el = document.createElement("esp-group");
         this.groupEls.set(r.id, el);
       }
-      el.onToggle = r.tabbed ? () => this.openTabs(r.id, r.paths) : () => this.toggle(r.id);
+      // While searching, groups show unfolded with their matches: a click does not fold them; a tabbed
+      // group found by one of its panels opens that tab.
+      el.onToggle = r.tabbed ? () => this.openTabs(r.id, r.match ? [r.match] : r.paths) : searching ? () => {} : () => this.toggle(r.id);
       el.update(r, this.lang, iconOnly, rtl, this.groupLooks.get(r.id), this.settings.header, this.settings.hide_count);
       return el;
     });
     for (const id of [...this.groupEls.keys()]) if (!used.has(id)) this.groupEls.delete(id);
+    if (this.settings.search) out.unshift(this.searchBox(iconOnly, rows.length > 0));
     return out;
+  }
+
+  /** The search box, one element for the life of the sidebar (it keeps its focus and caret across renders). */
+  searchBox(iconOnly, found) {
+    let el = this.searchEl;
+    if (!el) {
+      el = this.searchEl = document.createElement("esp-search");
+      el.onQuery = (query) => {
+        this.query = query;
+        this.refresh();
+      };
+      el.onEnter = () => {
+        const path = L.firstResult(this.rows, this.lastTab);
+        if (!path) return;
+        this.query = "";
+        this.refresh();
+        if (path !== this.selected) navigate(`/${path}`);
+      };
+      el.onDown = () => this.sb.shadowRoot?.querySelector("ha-list-nav.before-spacer")?.focusItemAtIndex?.(0);
+    }
+    el.update(this.query, this.lang, iconOnly, found);
+    return el;
   }
 
   /**
