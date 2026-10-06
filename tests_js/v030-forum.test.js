@@ -94,9 +94,8 @@ test("#34 pill background: lighter on dark themes, darker on light ones, group c
 
 test("#33 editor: a 'starts open' toggle on the group row, shown only while groups start collapsed; he + en", () => {
   const text = fs.readFileSync(MODULE, "utf8");
-  assert.match(text, /class: "icon-btn open-btn"/);
-  assert.match(text, /"aria-pressed": String\(node\.start_open === true\)/);
-  assert.match(text, /:host\(:not\(\[start-collapsed\]\)\) \.open-btn \{ display: none; \}/);
+  assert.match(text, /opt\("open-btn", "open", "optOpen", "startOpen", node\.start_open === true/);
+    assert.match(text, /:host\(:not\(\[start-collapsed\]\)\) \.open-btn \{ display: none; \}/);
   for (const key of ["startOpen", "header_pill"]) assert.equal(text.match(new RegExp(`^    ${key}: "`, "gm"))?.length, 2, key);
   assert.match(text, /:host\(\[header="pill"\]\) \.row \{ border-radius: var\(--esp-group-header-radius, 20px\);/);
 });

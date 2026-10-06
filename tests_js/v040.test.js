@@ -85,8 +85,9 @@ test("sidebar row: a link, current while one of its tabs is open; no count or ch
 });
 
 test("editor: a pressed toggle per group, read from the current tree; he + en", () => {
-  assert.match(SRC, /class: "icon-btn tab-btn"/);
-  assert.match(SRC, /"aria-pressed": String\(node\.tabbed === true\)/);
+  assert.match(SRC, /opt\("tab-btn", "tabbed", "optTabs", "tabbed", node\.tabbed === true/);
+  assert.match(SRC, /"aria-pressed": String\(on\)/);
+  for (const key of ["optTabs", "optOpen"]) assert.equal(SRC.match(new RegExp(`^    ${key}: "`, "gm"))?.length, 2, key);
   assert.match(SRC, /this\.actions\.setTabbed\(node\.id, this\.group\(node\.id\)\?\.tabbed !== true\)/);
   // The same fix for "starts open": a second click must turn it off again.
   assert.match(SRC, /this\.actions\.setStartOpen\(node\.id, this\.group\(node\.id\)\?\.start_open !== true\)/);

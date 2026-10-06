@@ -99,6 +99,9 @@ const STRINGS = {
     startCollapsedHelp: "On every page load, except groups whose open folder button is on (with one group open at a time: the first of them). Folding is then not remembered.",
     startOpen: "{name} opens on page load",
     tabbed: "Show {name} as one item, its items as tabs",
+    optTabs: "Tabs",
+    optOpen: "Starts open",
+    optUngroup: "Ungroup",
     accordion: "One group open at a time",
     toggleAllOption: "Collapse / expand all button next to the title",
     hideCount: "Hide the number of items on folded groups",
@@ -198,6 +201,9 @@ const STRINGS = {
     startCollapsedHelp: "בכל טעינה של הדף, חוץ מקבוצות שכפתור התיקייה הפתוחה שלהן מופעל (כשרק קבוצה אחת פתוחה: הראשונה מהן). קיפול של קבוצה לא נשמר.",
     startOpen: "{name} נפתחת בטעינת הדף",
     tabbed: "הצגת {name} כפריט אחד, והפריטים שבה כלשוניות",
+    optTabs: "לשוניות",
+    optOpen: "פתוחה בטעינה",
+    optUngroup: "פירוק",
     accordion: "קבוצה אחת פתוחה בכל פעם",
     toggleAllOption: "כפתור קיפול ופתיחה של הכול ליד הכותרת",
     hideCount: "הסתרת מספר הפריטים בקבוצות מקופלות",
@@ -542,7 +548,15 @@ button { font: inherit; color: inherit; }
 .color-line input[type="color"] { flex: none; width: 36px; height: 32px; padding: 0 2px; border: 1px solid var(--divider-color); border-radius: 6px; background: none; cursor: pointer; }
 .color-line input[type="text"] { flex: 1; min-width: 0; font: inherit; color: inherit; background: transparent; border: 1px solid var(--divider-color); border-radius: 6px; padding: 6px; }
 .color-line input[aria-invalid="true"] { border-color: var(--esp-error-color); }
-.open-btn[aria-pressed="true"], .tab-btn[aria-pressed="true"] { background: rgba(var(--rgb-primary-color, 3,169,244), 0.18); color: var(--esp-action-color); }
+/* Group options under the name (the name keeps the head row's width): labelled toggles. */
+.opts { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 6px 6px; }
+.opt { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; padding-inline: 8px 10px; border: 1px solid var(--divider-color);
+  border-radius: 16px; background: none; cursor: pointer; color: var(--secondary-text-color); font-size: var(--ha-font-size-s, 12px); }
+.opt svg { width: 18px; height: 18px; flex: none; fill: currentColor; }
+.opt:hover { background: rgba(127,127,127,0.12); }
+.opt:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 1px; }
+.opt[aria-pressed="true"] { background: rgba(var(--rgb-primary-color, 3,169,244), 0.18); border-color: transparent; color: var(--esp-action-color);
+  font-weight: var(--ha-font-weight-medium, 500); }
 :host(:not([start-collapsed])) .open-btn { display: none; }
 .group[data-tabbed] .open-btn { display: none; }
 .pins { border-style: dashed; }
@@ -655,9 +669,16 @@ class EspEditor extends HTMLElement {
     const iconBtn = label(`[data-focus-key="icon:${id}"]`, t(lang, "groupIcon", { name: node.name }));
     const headIcon = iconBtn?.querySelector(".icon");
     if (headIcon) headIcon.icon = node.icon || DEFAULT_ICON;
-    label(`[data-focus-key="ungroup:${id}"]`, t(lang, "ungroup", { name: node.name }), true);
-    label(`[data-focus-key="open:${id}"]`, t(lang, "startOpen", { name: node.name }), true)?.setAttribute("aria-pressed", String(node.start_open === true));
-    label(`[data-focus-key="tabbed:${id}"]`, t(lang, "tabbed", { name: node.name }), true)?.setAttribute("aria-pressed", String(node.tabbed === true));
+    label(`[data-focus-key="ungroup:${id}"]`, t(lang, "ungroup", { name: node.name }));
+    for (const [key, short, long, on] of [
+      ["open", "optOpen", "startOpen", node.start_open === true],
+      ["tabbed", "optTabs", "tabbed", node.tabbed === true],
+    ]) {
+      const btn = label(`[data-focus-key="${key}:${id}"]`, `${t(lang, short)}, ${node.name}`);
+      if (!btn) continue;
+      btn.title = t(lang, long, { name: node.name });
+      btn.setAttribute("aria-pressed", String(on));
+    }
     this._q(`[data-block="${CSS.escape(L.groupKey(id))}"]`)?.toggleAttribute("data-tabbed", node.tabbed === true);
     label(`[data-children="${id}"]`, node.name);
     const pending = this.nameErrors.get(id);
@@ -843,52 +864,51 @@ class EspEditor extends HTMLElement {
         iconEl(node.icon || DEFAULT_ICON),
       ),
       input,
-      // "Starts open" matters only while groups start collapsed: shown with that setting (host attribute).
-      h(
-        "button",
-        {
-          class: "icon-btn open-btn",
-          type: "button",
-          "aria-pressed": String(node.start_open === true),
-          "aria-label": t(lang, "startOpen", { name: node.name }),
-          title: t(lang, "startOpen", { name: node.name }),
-          "data-focus-key": `open:${node.id}`,
-          onclick: () => this.actions.setStartOpen(node.id, this.group(node.id)?.start_open !== true),
-        },
-        svg(ICONS.folderOpen),
-      ),
-      h(
-        "button",
-        {
-          class: "icon-btn tab-btn",
-          type: "button",
-          "aria-pressed": String(node.tabbed === true),
-          "aria-label": t(lang, "tabbed", { name: node.name }),
-          title: t(lang, "tabbed", { name: node.name }),
-          "data-focus-key": `tabbed:${node.id}`,
-          onclick: () => this.actions.setTabbed(node.id, this.group(node.id)?.tabbed !== true),
-        },
-        svg(ICONS.tabs),
-      ),
-      h(
-        "button",
-        {
-          class: "icon-btn",
-          type: "button",
-          "aria-label": t(lang, "ungroup", { name: node.name }),
-          title: t(lang, "ungroup", { name: node.name }),
-          "data-focus-key": `ungroup:${node.id}`,
-          onclick: () => this.actions.ungroup(node.id),
-        },
-        svg(ICONS.ungroup),
-      ),
     );
     const nameError = h(
       "div",
       { class: "error field-error", id: `name-err-${node.id}`, role: "alert" },
       pending === undefined ? null : t(lang, "nameRequired"),
     );
-    const block = h("div", { class: "group", role: "listitem", "data-block": key, "data-tabbed": node.tabbed === true }, head, nameError);
+    // Labelled toggles on their own line: the head row keeps its width for the name. The accessible name
+    // starts with the visible label; the tooltip explains it. "Starts open" matters only while groups start
+    // collapsed and not for a tabbed group (CSS hides it then).
+    const opt = (cls, key, short, long, on, icon, run) =>
+      h(
+        "button",
+        {
+          class: `opt ${cls}`,
+          type: "button",
+          "aria-pressed": String(on),
+          "aria-label": `${t(lang, short)}, ${node.name}`,
+          title: t(lang, long, { name: node.name }),
+          "data-focus-key": `${key}:${node.id}`,
+          onclick: run,
+        },
+        svg(icon),
+        t(lang, short),
+      );
+    const opts = h(
+      "div",
+      { class: "opts" },
+      opt("tab-btn", "tabbed", "optTabs", "tabbed", node.tabbed === true, ICONS.tabs, () => this.actions.setTabbed(node.id, this.group(node.id)?.tabbed !== true)),
+      opt("open-btn", "open", "optOpen", "startOpen", node.start_open === true, ICONS.folderOpen, () =>
+        this.actions.setStartOpen(node.id, this.group(node.id)?.start_open !== true),
+      ),
+      h(
+        "button",
+        {
+          class: "opt ungroup-btn",
+          type: "button",
+          "aria-label": t(lang, "ungroup", { name: node.name }),
+          "data-focus-key": `ungroup:${node.id}`,
+          onclick: () => this.actions.ungroup(node.id),
+        },
+        svg(ICONS.ungroup),
+        t(lang, "optUngroup"),
+      ),
+    );
+    const block = h("div", { class: "group", role: "listitem", "data-block": key, "data-tabbed": node.tabbed === true }, head, nameError, opts);
     this.paintGroup(block, node);
     if (this.iconEditing === node.id) block.append(this.iconEditor(node));
     const kids = h("div", { class: "children", role: "list", "aria-label": node.name, "data-children": node.id });
