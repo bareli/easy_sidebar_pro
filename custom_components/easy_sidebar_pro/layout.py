@@ -182,6 +182,7 @@ def validate_layout(data: Any) -> dict[str, Any]:
             "color": _color(group.get("color"), f"{where}.color"),
             "icon_color": _color(group.get("icon_color"), f"{where}.icon_color"),
             "start_open": _flag(group.get("start_open", False), f"{where}.start_open"),
+            "tabbed": _flag(group.get("tabbed", False), f"{where}.tabbed"),
             "panels": clean_panels,
         }
 

@@ -20,7 +20,7 @@ test("#36 hide_count: editor checkbox, both languages, passed to the group heade
   assert.match(SRC, /check\("hide_count", "hideCount"\)/);
   assert.equal(SRC.match(/^\s+hideCount: "/gm).length, 2);
   assert.match(SRC, /this\.settings\.header, this\.settings\.hide_count\)/);
-  assert.match(SRC, /row\.collapsed && !hideCount \? String\(row\.count\) : ""/);
+  assert.match(SRC, /collapsed && !hideCount \? String\(row\.count\) : ""/);
   // The screen-reader name keeps the count.
   assert.match(SRC, /aria-label", `\$\{row\.name\}, \$\{count\}`/);
 });

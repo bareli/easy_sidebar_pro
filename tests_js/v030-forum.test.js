@@ -16,7 +16,7 @@ const FORUM = {
     system: { name: "System", icon: null, color: null, icon_color: null, start_open: true, panels: ["calendar"] },
   },
   grid: ["logbook", "history"],
-  settings: { start_collapsed: true, accordion: true, toggle_all: false, hide_count: false, header: "pill", divider: "line" },
+  settings: { start_collapsed: true, accordion: true, toggle_all: false, hide_count: false, search: false, header: "pill", divider: "line" },
 };
 
 test("#33 start_open round-trips through the tree; new groups and old layouts default to false", () => {
@@ -68,7 +68,7 @@ test("#34 pill is a header style on both sides; settings keep it", () => {
   assert.equal(L.cleanSettings({ header: "Pill" }).header, "plain");
   const py = fs.readFileSync(new URL("../custom_components/easy_sidebar_pro/const.py", import.meta.url), "utf8");
   assert.match(py, /HEADER_STYLES = \("plain", "tinted", "line", "pill"\)/);
-  assert.match(py, /GROUP_KEYS = \("name", "icon", "color", "icon_color", "start_open", "panels"\)/);
+  assert.match(py, /GROUP_KEYS = \("name", "icon", "color", "icon_color", "start_open", "tabbed", "panels"\)/);
 });
 
 test("#34 pill background: lighter on dark themes, darker on light ones, group colour tinted; text stays readable", () => {

@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.4.0 (2026-10-06)
+
+- **Groups as tabs**: a new button on each group row in the editor shows the group as **one item** in the sidebar. Clicking it opens the group's first item (or the one you had open last in this page), with a bar of tabs above the page: one tab per item of the group, in the group's order. The page itself is Home Assistant's own (dashboards, map, history, settings...), so everything in it works as before; its header sits below the tab bar. While any of its tabs is open, the group's row is highlighted in the sidebar. Hidden items are not tabs. On narrow screens the tabs scroll sideways. Tabs are links: Ctrl / middle click opens one in a new browser tab.
+- **Search box** (option under **Display** in the editor, off by default): a box at the top of the sidebar that filters by the names you see as you type (any case, accents ignored). Matching items show with their group, unfolded; a group whose name matches shows all its items. A tabs group shows as its one row when its name or any of its items match, and opens that item. Enter opens the first result, Down moves into the results, Escape clears. Hidden in the icon-only sidebar.
+- A group's "starts open" button turned off again only after reopening the editor; a second click now turns it off.
+- After an update, the browser could keep the previous version's `layout.js` from its cache next to the new sidebar code. The file is now loaded with the version in its address.
+
 ## v0.3.2 (2026-10-04)
 
 - The editor hint now mentions the eye button: it hides or shows an item in the sidebar (hidden items stay listed in the editor, dimmed).

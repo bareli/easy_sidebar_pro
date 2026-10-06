@@ -27,12 +27,13 @@ NAMED_COLORS = (
 HEADER_STYLES = ("plain", "tinted", "line", "pill")
 DIVIDER_STYLES = ("line", "none")
 # Keys of a stored group, in output order (layout.js GROUP_KEYS is the same list).
-GROUP_KEYS = ("name", "icon", "color", "icon_color", "start_open", "panels")
+GROUP_KEYS = ("name", "icon", "color", "icon_color", "start_open", "tabbed", "panels")
 DEFAULT_SETTINGS = {
     "start_collapsed": False,
     "accordion": False,
     "toggle_all": False,
     "hide_count": False,
+    "search": False,
     "header": "plain",
     "divider": "line",
 }

@@ -191,3 +191,29 @@ edited in the in-sidebar editor, validated by `layout.py` and mirrored in `layou
 - Bottom items as full rows / bottom groups, custom (non-panel) items with actions, visibility and
   notification templates, YAML config file: out of scope for this release.
 - Animations (delay / off): no slide animation is added.
+
+## 8. v0.4: tabbed groups
+
+- `groups.<id>.tabbed` (boolean, missing = false; anything else is refused, `invalid_format`). Editor: a
+  toggle button (`aria-pressed`) on each group row; the "starts open" button is hidden for a tabbed group.
+- Sidebar: a tabbed group is one row (`esp-group[tabbed]`, role link, no count or chevron, never folded,
+  left out of accordion and collapse / expand all). Click or Enter opens the tab last open in this page
+  (memory per page, not stored) when still shown, else the first visible member. While a member is open the
+  row is selected (HA's look: 12% of the theme colour, `aria-current="page"`).
+- Tab strip (`esp-tabs`, 48 px + top safe area): slotted into HA's `ha-drawer` (`slot="appContent"`) right
+  before `partial-panel-resolver`, shown while the open panel is a visible member of a tabbed group. Tabs are
+  `<a href>` (plain click: HA's client-side navigation; modified clicks: the browser's). Group icon and name
+  at the start (hidden under 600 px); tabs scroll sideways.
+- Resolver while the strip shows: `display: block`, height minus the strip, `transform: translateZ(0)` (the
+  containing block of the panels' `position: fixed` headers), `--ha-sidebar-width: 0px`,
+  `--ha-top-app-bar-width: 100%`, `--safe-area-inset-top: 0px`; all removed when the strip goes. Checked after
+  every sidebar update; HA rebuilding its main view (narrow / wide) brings a new sidebar and controller.
+- Search (`settings.search`, boolean, default false): `<esp-search>` first in the panel list (one element per
+  sidebar, keeps focus), not in the icon-only rail (there the full list shows; the query returns on expand).
+  `searchRows`: names as shown (`panelTitle`), NFKD, marks dropped, lower case, substring. Panel: its name.
+  Group: unfolded with matching members (all when the group name matches), clicks do not fold. Tabbed group:
+  its one row when its name or a member matches; `match` = first matching member (Enter / click opens it).
+  Enter = first result, Down = `focusItemAtIndex(0)`, Escape clears; list keys and Escape stop at the box.
+  Query lives in the page only. Pinned icons are not filtered.
+- Pages are HA's own: no iframe, no panel created by us. A dashboard with several views shows its own view
+  tabs under the strip (two levels, styled apart).

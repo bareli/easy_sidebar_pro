@@ -1,6 +1,8 @@
 // Easy Sidebar Pro: collapsible groups in the Home Assistant sidebar, edited in place.
 // Patches ha-sidebar's own render methods so groups are part of HA's render cycle (no flicker).
-import * as L from "./layout.js";
+// The model is fetched with this module's own `?v=<version>`: the static files carry no cache headers,
+// so a plain "./layout.js" could come from the browser cache of the previous release.
+const L = await import(`./layout.js${new URL(import.meta.url).search}`);
 
 const DOMAIN = "easy_sidebar_pro";
 const ctrls = new WeakMap();
@@ -18,6 +20,9 @@ const ICONS = {
   pin: "M16,12V4H17V2H7V4H8V12L6,14V16H11.2V22H12.8V16H18V14L16,12Z",
   collapseAll: "M16.59,5.41L15.17,4L12,7.17L8.83,4L7.41,5.41L12,10M7.41,18.59L8.83,20L12,16.83L15.17,20L16.58,18.59L12,14L7.41,18.59Z",
   expandAll: "M12,18.17L8.83,15L7.42,16.41L12,21L16.59,16.41L15.17,15M12,5.83L15.17,9L16.58,7.59L12,3L7.41,7.59L8.83,9L12,5.83Z",
+  tabs: "M21,3H3A2,2 0 0,0 1,5V19A2,2 0 0,0 3,21H21A2,2 0 0,0 23,19V5A2,2 0 0,0 21,3M21,19H3V5H13V9H21V19Z",
+  search: "M9.5,3A6.5,6.5 0 0,1 16,9.5C16,11.11 15.41,12.59 14.44,13.73L14.71,14H15.5L20.5,19L19,20.5L14,15.5V14.71L13.73,14.44C12.59,15.41 11.11,16 9.5,16A6.5,6.5 0 0,1 3,9.5A6.5,6.5 0 0,1 9.5,3M9.5,5C7,5 5,7 5,9.5C5,12 7,14 9.5,14C12,14 14,12 14,9.5C14,7 12,5 9.5,5Z",
+  close: "M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z",
   folderOpen: "M6.1,10L4,18V8H21A2,2 0 0,0 19,6H12L10,4H4A2,2 0 0,0 2,6V18A2,2 0 0,0 4,20H19C19.9,20 20.7,19.4 20.9,18.5L23.2,10H6.1M19,18H6L7.6,12H20.6L19,18Z",
 };
 
@@ -36,6 +41,18 @@ const HOLD_MS = 1500;
 const GHOST_INSET = 24;
 const GHOST_GAP = 28;
 const ADOPT_SPREAD_MS = 1000;
+const TABS_HEIGHT = 48;
+// What the tab strip sets on HA's panel resolver. The transform makes it the containing block of the
+// panels' fixed headers, so they sit below the strip; the variables they place themselves with then
+// count from the resolver, not the window (sidebar width 0, full width, no top inset: the strip has it).
+const RESOLVER_STYLE = {
+  display: "block",
+  height: `calc(100% - ${TABS_HEIGHT}px - var(--safe-area-inset-top, 0px))`,
+  transform: "translateZ(0)",
+  "--ha-sidebar-width": "0px",
+  "--ha-top-app-bar-width": "100%",
+  "--safe-area-inset-top": "0px",
+};
 const SUGGESTED_ICONS = [
   "mdi:home", "mdi:sofa", "mdi:bed", "mdi:silverware-fork-knife", "mdi:lightbulb-group", "mdi:thermometer",
   "mdi:shield-home", "mdi:camera", "mdi:chart-line", "mdi:calendar-month", "mdi:tools", "mdi:cog",
@@ -81,9 +98,14 @@ const STRINGS = {
     startCollapsed: "Groups start collapsed",
     startCollapsedHelp: "On every page load, except groups whose open folder button is on (with one group open at a time: the first of them). Folding is then not remembered.",
     startOpen: "{name} opens on page load",
+    tabbed: "Show {name} as one item, its items as tabs",
     accordion: "One group open at a time",
     toggleAllOption: "Collapse / expand all button next to the title",
     hideCount: "Hide the number of items on folded groups",
+    searchOption: "Search box at the top of the sidebar",
+    search: "Search the sidebar",
+    searchClear: "Clear the search",
+    searchNone: "No matching items",
     headerStyle: "Group headers",
     header_plain: "Plain",
     header_tinted: "Tinted background",
@@ -175,9 +197,14 @@ const STRINGS = {
     startCollapsed: "הקבוצות מתחילות מקופלות",
     startCollapsedHelp: "בכל טעינה של הדף, חוץ מקבוצות שכפתור התיקייה הפתוחה שלהן מופעל (כשרק קבוצה אחת פתוחה: הראשונה מהן). קיפול של קבוצה לא נשמר.",
     startOpen: "{name} נפתחת בטעינת הדף",
+    tabbed: "הצגת {name} כפריט אחד, והפריטים שבה כלשוניות",
     accordion: "קבוצה אחת פתוחה בכל פעם",
     toggleAllOption: "כפתור קיפול ופתיחה של הכול ליד הכותרת",
     hideCount: "הסתרת מספר הפריטים בקבוצות מקופלות",
+    searchOption: "תיבת חיפוש בראש סרגל הצד",
+    search: "חיפוש בסרגל הצד",
+    searchClear: "ניקוי החיפוש",
+    searchNone: "אין פריטים מתאימים",
     headerStyle: "כותרות הקבוצות",
     header_plain: "רגילות",
     header_tinted: "רקע צבעוני",
@@ -297,6 +324,16 @@ function setVar(el, name, value) {
 
 const panelTitle = (hass, panel) => hass.localize?.(`panel.${panel.title}`) || panel.title || panel.url_path;
 
+/** Icon of a panel without its sidebar row (rows of a tabbed group are not rendered). */
+const panelIcon = (panel) =>
+  PANEL_ICONS[panel.url_path] || panel.icon || (panel.component_name === "lovelace" ? "mdi:view-dashboard" : "mdi:application-outline");
+
+/** HA's own client-side navigation (what its `navigate()` does). */
+function navigate(path) {
+  history.pushState(null, "", path);
+  window.dispatchEvent(new CustomEvent("location-changed", { detail: { replace: false } }));
+}
+
 /* ------------------------------------------------------------------ group header */
 
 // Theme hooks (documented in the README): --esp-group-header-text-color, --esp-group-header-icon-color,
@@ -335,6 +372,9 @@ const GROUP_CSS = `
 :host([icon-only]) .row { padding-inline: 12px; justify-content: flex-start; }
 :host([icon-only][collapsed]) .row { border-inline-start: 3px solid var(--divider-color); padding-inline-start: 9px; }
 :host([icon-only][collapsed][header="pill"]) .row { border-inline-start: 0; padding-inline-start: 12px; }
+/* Tabbed group: one row that opens a page; selected like HA's own rows (12% of the theme colour). */
+:host([tabbed]) .count, :host([tabbed]) .chev { display: none; }
+:host([tabbed][selected]) .row { box-shadow: inset 0 0 0 100vmax rgba(var(--rgb-primary-color, 3,169,244), 0.12); }
 @media (prefers-reduced-motion: reduce) { .chev { transition: none; } }
 `;
 
@@ -384,14 +424,27 @@ class EspGroup extends HTMLElement {
     if (this.getAttribute("header") !== header) this.setAttribute("header", header);
     this._icon.icon = row.icon || DEFAULT_ICON;
     this._name.textContent = row.name;
+    const tabbed = row.tabbed === true;
+    const collapsed = !tabbed && row.collapsed;
     const count = row.count === 1 ? t(lang, "items1") : t(lang, "items", { n: row.count });
-    this._count.textContent = row.collapsed && !hideCount ? String(row.count) : "";
-    this.toggleAttribute("collapsed", row.collapsed);
-    this.toggleAttribute("selected", row.collapsed && row.selected);
+    this._count.textContent = collapsed && !hideCount ? String(row.count) : "";
+    this.toggleAttribute("tabbed", tabbed);
+    this.toggleAttribute("collapsed", collapsed);
+    this.toggleAttribute("selected", (tabbed || collapsed) && row.selected);
     this.toggleAttribute("icon-only", iconOnly);
     this.toggleAttribute("rtl", rtl);
-    this._row.setAttribute("aria-expanded", String(!row.collapsed));
-    this._row.setAttribute("aria-label", `${row.name}, ${count}`);
+    // A tabbed group opens a page (a link, current while one of its tabs is open); others fold.
+    this._row.setAttribute("role", tabbed ? "link" : "button");
+    if (tabbed) {
+      this._row.removeAttribute("aria-expanded");
+      this._row.setAttribute("aria-label", row.name);
+      if (row.selected) this._row.setAttribute("aria-current", "page");
+      else this._row.removeAttribute("aria-current");
+    } else {
+      this._row.removeAttribute("aria-current");
+      this._row.setAttribute("aria-expanded", String(!row.collapsed));
+      this._row.setAttribute("aria-label", `${row.name}, ${count}`);
+    }
     this.title = iconOnly ? row.name : "";
   }
 }
@@ -489,8 +542,9 @@ button { font: inherit; color: inherit; }
 .color-line input[type="color"] { flex: none; width: 36px; height: 32px; padding: 0 2px; border: 1px solid var(--divider-color); border-radius: 6px; background: none; cursor: pointer; }
 .color-line input[type="text"] { flex: 1; min-width: 0; font: inherit; color: inherit; background: transparent; border: 1px solid var(--divider-color); border-radius: 6px; padding: 6px; }
 .color-line input[aria-invalid="true"] { border-color: var(--esp-error-color); }
-.open-btn[aria-pressed="true"] { background: rgba(var(--rgb-primary-color, 3,169,244), 0.18); color: var(--esp-action-color); }
+.open-btn[aria-pressed="true"], .tab-btn[aria-pressed="true"] { background: rgba(var(--rgb-primary-color, 3,169,244), 0.18); color: var(--esp-action-color); }
 :host(:not([start-collapsed])) .open-btn { display: none; }
+.group[data-tabbed] .open-btn { display: none; }
 .pins { border-style: dashed; }
 .pins > .row.head { cursor: default; }
 .pins .head-space { flex: none; width: 32px; }
@@ -577,12 +631,17 @@ class EspEditor extends HTMLElement {
     return this.shadowRoot.querySelector(selector);
   }
 
+  /** The group as it is now (toggles patch in place, so a click handler must not use the node it was built with). */
+  group(id) {
+    return this.tree.find((n) => n.type === "group" && n.id === id);
+  }
+
   /**
    * A group's name or icon changed: update its controls in place. No re-render, so focus stays put
    * and a click that blurred the name field still lands on its button.
    */
   patchGroup(id) {
-    const node = this.tree.find((n) => n.type === "group" && n.id === id);
+    const node = this.group(id);
     if (!node) return;
     const lang = this.lang;
     const label = (sel, text, title = false) => {
@@ -598,6 +657,8 @@ class EspEditor extends HTMLElement {
     if (headIcon) headIcon.icon = node.icon || DEFAULT_ICON;
     label(`[data-focus-key="ungroup:${id}"]`, t(lang, "ungroup", { name: node.name }), true);
     label(`[data-focus-key="open:${id}"]`, t(lang, "startOpen", { name: node.name }), true)?.setAttribute("aria-pressed", String(node.start_open === true));
+    label(`[data-focus-key="tabbed:${id}"]`, t(lang, "tabbed", { name: node.name }), true)?.setAttribute("aria-pressed", String(node.tabbed === true));
+    this._q(`[data-block="${CSS.escape(L.groupKey(id))}"]`)?.toggleAttribute("data-tabbed", node.tabbed === true);
     label(`[data-children="${id}"]`, node.name);
     const pending = this.nameErrors.get(id);
     const input = this._q(`[data-focus-key="name:${id}"]`);
@@ -792,9 +853,22 @@ class EspEditor extends HTMLElement {
           "aria-label": t(lang, "startOpen", { name: node.name }),
           title: t(lang, "startOpen", { name: node.name }),
           "data-focus-key": `open:${node.id}`,
-          onclick: () => this.actions.setStartOpen(node.id, node.start_open !== true),
+          onclick: () => this.actions.setStartOpen(node.id, this.group(node.id)?.start_open !== true),
         },
         svg(ICONS.folderOpen),
+      ),
+      h(
+        "button",
+        {
+          class: "icon-btn tab-btn",
+          type: "button",
+          "aria-pressed": String(node.tabbed === true),
+          "aria-label": t(lang, "tabbed", { name: node.name }),
+          title: t(lang, "tabbed", { name: node.name }),
+          "data-focus-key": `tabbed:${node.id}`,
+          onclick: () => this.actions.setTabbed(node.id, this.group(node.id)?.tabbed !== true),
+        },
+        svg(ICONS.tabs),
       ),
       h(
         "button",
@@ -814,7 +888,7 @@ class EspEditor extends HTMLElement {
       { class: "error field-error", id: `name-err-${node.id}`, role: "alert" },
       pending === undefined ? null : t(lang, "nameRequired"),
     );
-    const block = h("div", { class: "group", role: "listitem", "data-block": key }, head, nameError);
+    const block = h("div", { class: "group", role: "listitem", "data-block": key, "data-tabbed": node.tabbed === true }, head, nameError);
     this.paintGroup(block, node);
     if (this.iconEditing === node.id) block.append(this.iconEditor(node));
     const kids = h("div", { class: "children", role: "list", "aria-label": node.name, "data-children": node.id });
@@ -1051,6 +1125,7 @@ class EspEditor extends HTMLElement {
       check("accordion", "accordion"),
       check("toggle_all", "toggleAllOption"),
       check("hide_count", "hideCount"),
+      check("search", "searchOption"),
       select("header", "headerStyle", L.HEADER_STYLES),
       select("divider", "dividerStyle", L.DIVIDER_STYLES),
     );
@@ -1278,8 +1353,167 @@ class EspEditor extends HTMLElement {
   }
 }
 
+/* ------------------------------------------------------------------ search box */
+
+// HA's sidebar is user-select: none; the field needs a caret. The box takes HA's item width.
+const SEARCH_CSS = `
+:host { display: block; margin: 0 4px 6px; width: var(--esp-item-width, auto); box-sizing: border-box; user-select: text; -webkit-user-select: text; }
+:host([icon-only]) { display: none; }
+.box { display: flex; align-items: center; gap: 8px; height: 40px; box-sizing: border-box; padding-inline: 12px 4px;
+  border-radius: var(--ha-border-radius-md, 8px); background: rgba(var(--rgb-primary-text-color, 0,0,0), 0.06);
+  color: var(--sidebar-text-color, var(--primary-text-color)); }
+.box:focus-within { outline: 2px solid var(--primary-color); outline-offset: -2px; }
+.glass { width: 20px; height: 20px; flex: none; fill: currentColor; color: var(--sidebar-icon-color, var(--secondary-text-color)); }
+input { flex: 1; min-width: 0; border: none; background: none; outline: none; font: inherit; font-size: var(--ha-font-size-m, 14px); color: inherit; padding: 0; }
+input::placeholder { color: var(--secondary-text-color); opacity: 1; }
+input::-webkit-search-cancel-button { display: none; }
+.clear { flex: none; width: 32px; height: 32px; display: grid; place-items: center; border: none; background: none; border-radius: 50%;
+  cursor: pointer; color: var(--secondary-text-color); padding: 0; }
+.clear[hidden] { display: none; }
+.clear svg { width: 18px; height: 18px; fill: currentColor; }
+.clear:hover { background: rgba(127,127,127,0.15); }
+.clear:focus-visible { outline: 2px solid var(--primary-color); }
+.none { padding: 8px 12px 0; color: var(--secondary-text-color); font-size: var(--ha-font-size-s, 12px); }
+.none:empty { display: none; }
+`;
+
+class EspSearch extends HTMLElement {
+  constructor() {
+    super();
+    const root = this.attachShadow({ mode: "open" });
+    const style = h("style");
+    style.textContent = SEARCH_CSS;
+    this._input = h("input", {
+      type: "search",
+      autocomplete: "off",
+      spellcheck: "false",
+      enterkeyhint: "go",
+      dir: "auto",
+      oninput: (e) => this.onQuery?.(e.target.value),
+      onkeydown: (e) => this._key(e),
+    });
+    this._clear = h("button", { class: "clear", type: "button", hidden: true, onclick: () => this.clear() }, svg(ICONS.close));
+    this._none = h("div", { class: "none", role: "status" });
+    root.append(style, h("div", { class: "box" }, svg(ICONS.search, "glass"), this._input, this._clear), this._none);
+  }
+
+  connectedCallback() {
+    // A child of HA's panel list (role=list), which may own only list items.
+    this.setAttribute("role", "listitem");
+  }
+
+  /**
+   * Enter opens the first result, Down moves into the results, Escape clears. The list's own keys stay
+   * here (HA's list would take them for its rows); every other key still reaches HA.
+   */
+  _key(e) {
+    if (e.key === "Escape" && this._input.value) {
+      e.preventDefault();
+      this.clear();
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      this.onEnter?.();
+    } else if (e.key === "ArrowDown") {
+      e.preventDefault();
+      this.onDown?.();
+    }
+    if (LIST_KEYS.has(e.key) || e.key === "Escape") e.stopPropagation();
+  }
+
+  clear() {
+    this._input.value = "";
+    this.onQuery?.("");
+    this._input.focus();
+  }
+
+  update(query, lang, iconOnly, found) {
+    if (this._input.value !== query) this._input.value = query;
+    const label = t(lang, "search");
+    if (this._input.placeholder !== label) {
+      this._input.placeholder = label;
+      this._input.setAttribute("aria-label", label);
+      this._clear.setAttribute("aria-label", t(lang, "searchClear"));
+      this._clear.title = t(lang, "searchClear");
+    }
+    this._clear.hidden = !query;
+    const none = query.trim() && !found ? t(lang, "searchNone") : "";
+    if (this._none.textContent !== none) this._none.textContent = none;
+    this.toggleAttribute("icon-only", iconOnly);
+  }
+}
+
+/* ------------------------------------------------------------------ tab strip (tabbed groups) */
+
+// Above the page (slotted into HA's drawer before the panel): a second level, styled apart from HA's
+// own header and view tabs. Selected text is the theme colour mixed toward the text colour (4.5:1).
+const TABS_CSS = `
+:host { display: flex; align-items: center; gap: 12px; box-sizing: border-box;
+  height: calc(${TABS_HEIGHT}px + var(--safe-area-inset-top, 0px)); padding: var(--safe-area-inset-top, 0px) 12px 0;
+  background: var(--secondary-background-color, #e5e5e5); border-bottom: 1px solid var(--divider-color);
+  color: var(--primary-text-color); font-size: var(--ha-font-size-m, 14px);
+  --esp-tab-current: var(--primary-color);
+  --esp-tab-current: color-mix(in srgb, var(--primary-color) 50%, var(--primary-text-color, #212121)); }
+.title { display: flex; align-items: center; gap: 8px; flex: none; max-width: 30%; min-width: 0; color: var(--secondary-text-color);
+  font-weight: var(--ha-font-weight-medium, 500); }
+.title span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.icon { --mdc-icon-size: 18px; width: 18px; height: 18px; flex: none; }
+nav { flex: 1; min-width: 0; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding-block: 4px; }
+nav::-webkit-scrollbar { display: none; }
+a { display: inline-flex; align-items: center; gap: 6px; flex: none; box-sizing: border-box; height: 34px; padding: 0 14px; border-radius: 17px;
+  border: 1px solid var(--divider-color); background: var(--card-background-color, #fff); color: inherit; text-decoration: none; white-space: nowrap; }
+a:hover { background-image: linear-gradient(rgba(127,127,127,0.12), rgba(127,127,127,0.12)); }
+a[aria-current="page"] { border-color: transparent; color: var(--esp-tab-current); font-weight: var(--ha-font-weight-medium, 500);
+  background: rgba(var(--rgb-primary-color, 3,169,244), 0.14); }
+a:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 1px; }
+@media (max-width: 600px) { .title { display: none; } }
+`;
+
+class EspTabs extends HTMLElement {
+  constructor() {
+    super();
+    const root = this.attachShadow({ mode: "open" });
+    const style = h("style");
+    style.textContent = TABS_CSS;
+    this._title = h("div", { class: "title", "aria-hidden": "true" });
+    this._nav = h("nav");
+    root.append(style, this._title, this._nav);
+    this._sig = "";
+  }
+
+  /** view: { name, icon, tabs: [{ path, title, icon }], selected }. Rebuilt only when it changes. */
+  set(view) {
+    const sig = JSON.stringify(view);
+    if (sig === this._sig) return;
+    this._sig = sig;
+    this._title.replaceChildren(iconEl(view.icon || DEFAULT_ICON), h("span", { dir: "auto" }, view.name));
+    this._nav.setAttribute("aria-label", view.name);
+    this._nav.replaceChildren(
+      ...view.tabs.map((tab) =>
+        h(
+          "a",
+          {
+            href: `/${tab.path}`,
+            "aria-current": tab.path === view.selected ? "page" : null,
+            onclick: (e) => {
+              // A plain click navigates inside HA; modified clicks (new tab or window) stay the browser's.
+              if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+              e.preventDefault();
+              if (tab.path !== view.selected) navigate(`/${tab.path}`);
+            },
+          },
+          iconEl(tab.icon),
+          h("span", { dir: "auto" }, tab.title),
+        ),
+      ),
+    );
+    requestAnimationFrame(() => this._nav.querySelector('[aria-current="page"]')?.scrollIntoView({ block: "nearest", inline: "nearest" }));
+  }
+}
+
 customElements.get("esp-group") || customElements.define("esp-group", EspGroup);
 customElements.get("esp-editor") || customElements.define("esp-editor", EspEditor);
+customElements.get("esp-tabs") || customElements.define("esp-tabs", EspTabs);
+customElements.get("esp-search") || customElements.define("esp-search", EspSearch);
 
 /* ------------------------------------------------------------------ controller (one per ha-sidebar) */
 
@@ -1352,6 +1586,17 @@ class Controller {
     this.settings = { ...L.DEFAULT_SETTINGS };
     this.pal = null;
     this.keyedNavs = new WeakSet();
+    // Tabbed groups: the strip above the page, the resolver it styled, the last tab opened per group (this page only).
+    this.tabsEl = null;
+    this.tabsRes = null;
+    this.lastTab = new Map();
+    this.byPath = new Map();
+    this.visible = [];
+    this.selected = null;
+    // The sidebar search (this page only): what is typed, the box, the rows it gave.
+    this.query = "";
+    this.searchEl = null;
+    this.rows = [];
     // Until our layout arrives, show an empty list rather than flashing the flat one.
     this.holdUntil = Date.now() + HOLD_MS;
     this.holdTimer = setTimeout(() => this.refresh(), HOLD_MS);
@@ -1406,6 +1651,7 @@ class Controller {
   }
 
   disconnect() {
+    this.clearTabs();
     this.unsub?.();
     this.unsub = null;
     this.nativeUnsub?.();
@@ -1494,10 +1740,11 @@ class Controller {
     if (!panels.length) return orig.call(this.sb, panels, selected);
     this.pinPanels = [];
     this.pinPaths = [];
+    const byPath = (this.byPath = new Map(panels.map((p) => [p.url_path, p])));
+    const visible = (this.visible = [...byPath.keys()]);
+    this.selected = selected;
     if (this.editing) return [this.editor];
-    const byPath = new Map(panels.map((p) => [p.url_path, p]));
     const layout = this.viewLayout();
-    const visible = [...byPath.keys()];
     this.settings = L.cleanSettings(layout?.settings);
     if (this.sessionInitial && this.session !== null) {
       this.session = L.initialCollapsed(layout, visible, this.settings.accordion);
@@ -1505,13 +1752,20 @@ class Controller {
     }
     this.pinPaths = L.pinned(layout, visible);
     this.pinPanels = this.pinPaths.map((p) => byPath.get(p));
-    const rows = L.arrange(layout, visible, this.collapsed, selected);
-    this.rowGroups = new Map(rows.filter((r) => r.type === "panel").map((r) => [r.path, r.group]));
-    this.groupNames = new Map(rows.filter((r) => r.type === "group").map((r) => [r.id, r.name]));
-    this.groupLooks = new Map(rows.filter((r) => r.type === "group").map((r) => [r.id, this.look(r.color, r.icon_color, this.settings.header)]));
-    this.lastInGroup = new Set(rows.filter((r) => r.type === "panel" && r.last).map((r) => r.path));
     // HA reflects `expanded` from `alwaysExpand` in updated(), i.e. after this render: read the property.
     const iconOnly = typeof this.sb.alwaysExpand === "boolean" ? !this.sb.alwaysExpand : !this.sb.hasAttribute("expanded");
+    if (!this.settings.search) this.query = "";
+    // The icon-only rail has no box: it shows everything, and the query is back when the sidebar expands.
+    const searching = this.settings.search && !iconOnly && !!this.query.trim();
+    const rows = searching
+      ? L.searchRows(layout, visible, new Map(panels.map((p) => [p.url_path, panelTitle(this.hass, p)])), this.query, selected)
+      : L.arrange(layout, visible, this.collapsed, selected);
+    this.rows = rows;
+    this.rowGroups = new Map(rows.filter((r) => r.type === "panel").map((r) => [r.path, r.group]));
+    // Folding (accordion, collapse all) is about the groups that fold: a tabbed group is a single row.
+    this.groupNames = new Map(rows.filter((r) => r.type === "group" && !r.tabbed).map((r) => [r.id, r.name]));
+    this.groupLooks = new Map(rows.filter((r) => r.type === "group").map((r) => [r.id, this.look(r.color, r.icon_color, this.settings.header)]));
+    this.lastInGroup = new Set(rows.filter((r) => r.type === "panel" && r.last).map((r) => r.path));
     // HA sets the page direction on <html dir>; reading it avoids a style recalculation per render.
     const dir = document.documentElement.dir;
     const rtl = dir ? dir === "rtl" : getComputedStyle(this.sb).direction === "rtl";
@@ -1524,12 +1778,37 @@ class Controller {
         el = document.createElement("esp-group");
         this.groupEls.set(r.id, el);
       }
-      el.onToggle = () => this.toggle(r.id);
+      // While searching, groups show unfolded with their matches: a click does not fold them; a tabbed
+      // group found by one of its panels opens that tab.
+      el.onToggle = r.tabbed ? () => this.openTabs(r.id, r.match ? [r.match] : r.paths) : searching ? () => {} : () => this.toggle(r.id);
       el.update(r, this.lang, iconOnly, rtl, this.groupLooks.get(r.id), this.settings.header, this.settings.hide_count);
       return el;
     });
     for (const id of [...this.groupEls.keys()]) if (!used.has(id)) this.groupEls.delete(id);
+    if (this.settings.search) out.unshift(this.searchBox(iconOnly, rows.length > 0));
     return out;
+  }
+
+  /** The search box, one element for the life of the sidebar (it keeps its focus and caret across renders). */
+  searchBox(iconOnly, found) {
+    let el = this.searchEl;
+    if (!el) {
+      el = this.searchEl = document.createElement("esp-search");
+      el.onQuery = (query) => {
+        this.query = query;
+        this.refresh();
+      };
+      el.onEnter = () => {
+        const path = L.firstResult(this.rows, this.lastTab);
+        if (!path) return;
+        this.query = "";
+        this.refresh();
+        if (path !== this.selected) navigate(`/${path}`);
+      };
+      el.onDown = () => this.sb.shadowRoot?.querySelector("ha-list-nav.before-spacer")?.focusItemAtIndex?.(0);
+    }
+    el.update(this.query, this.lang, iconOnly, found);
+    return el;
   }
 
   /**
@@ -1700,6 +1979,7 @@ class Controller {
       this.descEls.delete(id);
     }
     this.afterPins(root);
+    this.syncTabs();
     for (const nav of root.querySelectorAll("ha-list-nav")) {
       // HA's list items unregister from disconnectedCallback, when the event can no longer reach the
       // list, so every row our renders replace stays in the list's `items` (a leak, and stale entries
@@ -1823,6 +2103,57 @@ class Controller {
     e.stopPropagation();
     const target = items.indexOf(next);
     if (target >= 0 && next !== items[index]) nav.focusItemAtIndex(target);
+  }
+
+  /** A tabbed row was clicked: open the tab last open in this page, or the first. */
+  openTabs(id, paths) {
+    const path = L.tabTarget(paths, this.lastTab.get(id));
+    if (path && path !== this.selected) navigate(`/${path}`);
+  }
+
+  /**
+   * The tab strip above the page while the open panel belongs to a tabbed group: slotted into HA's
+   * drawer right before the panel resolver, which is shortened by the strip's height. Checked after
+   * every sidebar update (a route change is one); HA rebuilding its main view brings a new sidebar
+   * and with it a new controller, which puts the strip back.
+   */
+  syncTabs() {
+    const tabs = this.data ? L.tabsFor(this.viewLayout(), this.visible, this.selected) : null;
+    const drawer = this.sb.parentElement;
+    const res = tabs && drawer ? [...drawer.children].find((el) => el.localName === "partial-panel-resolver") : null;
+    if (!res) return this.clearTabs();
+    this.lastTab.set(tabs.id, this.selected);
+    if (!this.tabsEl) {
+      this.tabsEl = document.createElement("esp-tabs");
+      this.tabsEl.slot = "appContent";
+    }
+    if (this.tabsEl.parentNode !== drawer || this.tabsEl.nextElementSibling !== res) drawer.insertBefore(this.tabsEl, res);
+    if (this.tabsRes !== res) {
+      this.unstyleResolver();
+      for (const [k, v] of Object.entries(RESOLVER_STYLE)) res.style.setProperty(k, v);
+      this.tabsRes = res;
+    }
+    const hass = this.hass;
+    this.tabsEl.set({
+      name: tabs.name,
+      icon: tabs.icon,
+      selected: this.selected,
+      tabs: tabs.paths.map((path) => {
+        const panel = this.byPath.get(path) ?? { url_path: path };
+        return { path, title: panelTitle(hass, panel), icon: panelIcon(panel) };
+      }),
+    });
+  }
+
+  clearTabs() {
+    this.tabsEl?.remove();
+    this.unstyleResolver();
+  }
+
+  unstyleResolver() {
+    if (!this.tabsRes) return;
+    for (const k of Object.keys(RESOLVER_STYLE)) this.tabsRes.style.removeProperty(k);
+    this.tabsRes = null;
   }
 
   /** Ids of the groups shown right now (folding applies to these). */
@@ -1989,6 +2320,11 @@ class Controller {
       setStartOpen: (id, value) => {
         if (typeof value !== "boolean") return;
         ed().tree = L.updateGroup(ed().tree, id, { start_open: value });
+        ed().patchGroup(id);
+      },
+      setTabbed: (id, value) => {
+        if (typeof value !== "boolean") return;
+        ed().tree = L.updateGroup(ed().tree, id, { tabbed: value });
         ed().patchGroup(id);
       },
       setIcon: (id, icon) => {

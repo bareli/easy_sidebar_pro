@@ -58,6 +58,14 @@ the same layout to every user who has not made their own.
   compact grid of icons above Settings and Notifications (four per row; one column when the sidebar shows
   icons only). Hover or focus an icon for its name. With the keyboard, use the arrow keys inside the grid
   and Enter to open; in the editor, Alt + Down on the last row pins it. Up to 20 items.
+- **Groups as tabs**: the tabs button on a group row in the editor turns the group into one sidebar item.
+  Clicking it opens the group's first item (or the one last open in this page) with a bar of tabs above the
+  page, one per item of the group. The pages are Home Assistant's own, unchanged; the group's row is
+  highlighted while any of them is open. A dashboard with several views keeps its own view tabs below the
+  bar. Hidden items are not tabs.
+- **Search box** (editor, **Display**, off by default): type part of a name at the top of the sidebar to
+  see only the items whose names contain it (any case), with their groups unfolded. A tabs group shows as
+  its one row if its name or any of its items match. Enter opens the first result, Escape clears.
 - **No flicker**: groups are drawn as part of Home Assistant's own sidebar, not patched in afterwards.
 - **Touch and keyboard**: drag with a finger or a mouse. With the keyboard, focus a handle and press
   Alt + Up / Down; a screen reader hears where the row landed.
