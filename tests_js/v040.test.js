@@ -101,7 +101,7 @@ test("tab strip: links (modified clicks stay the browser's), styles on the resol
   assert.match(SRC, /for \(const k of Object\.keys\(RESOLVER_STYLE\)\) this\.tabsRes\.style\.removeProperty\(k\);/);
   for (const key of ["display", "transform", "--ha-sidebar-width", "--ha-top-app-bar-width", "--safe-area-inset-top"])
     assert.ok(SRC.includes(`${key.startsWith("--") ? `"${key}"` : key}: `), key);
-  assert.match(SRC, /disconnect\(\) \{\n {4}this\.clearTabs\(\);/);
+  assert.match(SRC, /disconnect\(\) \{\r?\n {4}this\.clearTabs\(\);/);
 });
 
 test("the model is loaded with the module's own version (no stale layout.js after an upgrade)", () => {
@@ -174,6 +174,6 @@ test("search box: kept across renders, first in the list, gone in the rail; keys
   assert.match(SRC, /if \(this\.settings\.search\) out\.unshift\(this\.searchBox\(iconOnly, rows\.length > 0\)\);/);
   assert.match(SRC, /const searching = this\.settings\.search && !iconOnly && !!this\.query\.trim\(\);/);
   assert.match(SRC, /:host\(\[icon-only\]\) \{ display: none; \}/);
-  assert.match(SRC, /user-select: text; -webkit-user-select: text; \}\n:host\(\[icon-only\]\)/);
+  assert.match(SRC, /user-select: text; -webkit-user-select: text; \}\r?\n:host\(\[icon-only\]\)/);
   assert.match(SRC, /if \(LIST_KEYS\.has\(e\.key\) \|\| e\.key === "Escape"\) e\.stopPropagation\(\);/);
 });
