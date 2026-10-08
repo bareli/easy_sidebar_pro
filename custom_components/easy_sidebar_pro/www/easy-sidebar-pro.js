@@ -157,7 +157,8 @@ const STRINGS = {
     forkNote: "Saving makes this layout yours: it will no longer follow the default layout. You can go back to it later. Press Done again to save.",
     saveFailed: "Could not save. Try again.",
     saveFailedConnection: "Could not save. Check the connection and try again.",
-    saveFailedInvalid: "Could not save: a group name, icon or colour is not valid.",
+    saveFailedInvalid: "Could not save: Home Assistant refused the layout.",
+    errorDetails: "Details: {detail}",
     movedTop: "{name}: position {pos}",
     movedGroup: "{name}: in {group}, position {pos}",
     grouped: "Group created with {a} and {b}",
@@ -260,7 +261,8 @@ const STRINGS = {
     forkNote: "שמירה תהפוך את הפריסה לשלכם, והיא לא תעקוב יותר אחרי פריסת ברירת המחדל. אפשר לחזור אליה בהמשך. לחצו שוב על סיום כדי לשמור.",
     saveFailed: "לא ניתן לשמור. נסו שוב.",
     saveFailedConnection: "לא ניתן לשמור. בדקו את החיבור ונסו שוב.",
-    saveFailedInvalid: "לא ניתן לשמור: שם, סמל או צבע של קבוצה אינם תקינים.",
+    saveFailedInvalid: "לא ניתן לשמור: Home Assistant דחה את הפריסה.",
+    errorDetails: "פרטים: {detail}",
     movedTop: "{name}: מקום {pos}",
     movedGroup: "{name}: בקבוצה {group}, מקום {pos}",
     grouped: "נוצרה קבוצה עם {a} ועם {b}",
@@ -478,6 +480,7 @@ const EDITOR_CSS = `
 .bar-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
 .note { color: var(--secondary-text-color); font-size: var(--ha-font-size-s, 12px); line-height: 1.4; }
 .error { color: var(--esp-error-color); font-size: var(--ha-font-size-s, 12px); }
+.error.detail { font-family: var(--ha-font-family-code, monospace); overflow-wrap: anywhere; }
 .field-error { padding: 0 12px 6px; }
 .field-error:empty { padding: 0; }
 button { font: inherit; color: inherit; }
@@ -620,6 +623,7 @@ class EspEditor extends HTMLElement {
   open(opts) {
     Object.assign(this, opts);
     this.error = "";
+    this.errorDetail = "";
     // One inline confirmation at a time ("reset" | "setdef" | "cleardef"), a result message, and the
     // one-time note shown before a user on the default saves a change.
     this.confirming = null;
@@ -769,6 +773,7 @@ class EspEditor extends HTMLElement {
       this.notice ? h("div", { class: "notice", role: "alert" }, this.notice) : null,
       this.status ? h("div", { class: "notice", role: "status" }, this.status) : null,
       this.error ? h("div", { class: "error", role: "alert" }, this.error) : null,
+      this.error && this.errorDetail ? h("div", { class: "error detail", dir: "ltr" }, t(lang, "errorDetails", { detail: this.errorDetail })) : null,
     );
 
     const add = h(
@@ -2409,7 +2414,7 @@ class Controller {
           e.set({ tree, settings, hiddenSet: new Set(this.edit.baseHidden), confirming: null, notice: "", error: "", status: t(lang(), "resetDone") }, "done");
           rebase();
         } catch (err) {
-          e.set({ confirming: null, error: this.failText(err) });
+          e.set({ confirming: null, ...this.failure(err) });
         }
       },
       // No default: drop the layout and HA's custom order (HA sorts by itself again); hidden panels stay.
@@ -2420,7 +2425,7 @@ class Controller {
           await this.writePlainNative();
           this.stopEdit();
         } catch (err) {
-          e.set({ confirming: null, error: this.failText(err) });
+          e.set({ confirming: null, ...this.failure(err) });
         }
       },
       setDefault: async () => {
@@ -2432,7 +2437,7 @@ class Controller {
           rebase();
           e.set({ confirming: null, notice: "", error: "", status: t(lang(), "setDefaultDone") }, "done");
         } catch (err) {
-          e.set({ confirming: null, error: this.failText(err) });
+          e.set({ confirming: null, ...this.failure(err) });
         }
       },
       clearDefault: async () => {
@@ -2441,16 +2446,22 @@ class Controller {
           await this.hass.callWS({ type: `${DOMAIN}/default/set`, layout: null });
           e.set({ confirming: null, error: "", status: t(lang(), "clearDefaultDone") }, "done");
         } catch (err) {
-          e.set({ confirming: null, error: this.failText(err) });
+          e.set({ confirming: null, ...this.failure(err) });
         }
       },
     };
   }
 
-  /** A short localized message for a failed write: never a raw code, an id or the server's English text. */
-  failText(err) {
+  /**
+   * Editor state for a failed write: a short localized message, never a raw code. A layout the server
+   * refused also carries the server's reason as a separate detail line, so a report can say what failed.
+   */
+  failure(err) {
     const kind = L.saveErrorKind(err);
-    return t(this.lang, kind === "connection" ? "saveFailedConnection" : kind === "invalid" ? "saveFailedInvalid" : "saveFailed");
+    return {
+      error: t(this.lang, kind === "connection" ? "saveFailedConnection" : kind === "invalid" ? "saveFailedInvalid" : "saveFailed"),
+      errorDetail: kind === "invalid" ? L.errorDetail(err) : "",
+    };
   }
 
   /** HA's native sidebar user data from a tree (order and hidden panels). */
@@ -2506,7 +2517,7 @@ class Controller {
       const value = L.nativeHidden(current, new Set(this.edit.paths), hidden, this.edit.defaultInvisible);
       await this.hass.callWS({ type: "frontend/set_user_data", key: "sidebar", value });
     } catch (err) {
-      this.editor.set({ error: this.failText(err) });
+      this.editor.set({ ...this.failure(err) });
       return false;
     }
     this.stopEdit();
@@ -2519,7 +2530,7 @@ class Controller {
       await this.hass.callWS({ type: `${DOMAIN}/save`, layout: L.toLayout(tree, this.editor.settings) });
       await this.writeNative(tree, hidden);
     } catch (err) {
-      this.editor.set({ error: this.failText(err) });
+      this.editor.set({ ...this.failure(err) });
       return false;
     }
     if (close) this.stopEdit();

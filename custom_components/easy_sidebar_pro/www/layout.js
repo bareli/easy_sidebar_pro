@@ -65,12 +65,18 @@ export function buildTree(layout, paths, withPins = false) {
   return tree;
 }
 
+// Same rule as layout.py PANEL. Any other path is left out of a saved layout (it keeps HA's own
+// place) rather than making the server refuse the whole save.
+const PANEL_RE = /^[A-Za-z0-9_-]{1,100}$/;
+export const validPanel = (path) => typeof path === "string" && PANEL_RE.test(path);
+
 export function toLayout(tree, settings) {
   const order = [];
   const groups = {};
   let grid = [];
+  const paths = (children) => children.map((c) => c.path).filter(validPanel);
   for (const n of tree) {
-    if (isPins(n)) grid = n.children.map((c) => c.path);
+    if (isPins(n)) grid = paths(n.children);
     else if (n.type === "group") {
       order.push(groupKey(n.id));
       groups[n.id] = {
@@ -80,9 +86,9 @@ export function toLayout(tree, settings) {
         icon_color: n.icon_color ?? null,
         start_open: n.start_open === true,
         tabbed: n.tabbed === true,
-        panels: n.children.map((c) => c.path),
+        panels: paths(n.children),
       };
-    } else {
+    } else if (validPanel(n.path)) {
       order.push(n.path);
     }
   }
@@ -639,6 +645,12 @@ export function uniqueName(tree, base) {
 // home-assistant-js-websocket rejects with a bare number when the socket fails
 // (1 cannot connect, 2 invalid auth, 3 connection lost, 4 host required, ...).
 /** Which localized message a failed write shows: "connection", "invalid" (server validation) or "other". */
+/** The server's reason for refusing a layout, one line and bounded (it names the entry that failed). */
+export function errorDetail(err) {
+  const text = typeof err?.message === "string" ? err.message.replace(/\s+/g, " ").trim() : "";
+  return text.length > 200 ? `${text.slice(0, 199)}…` : text;
+}
+
 export function saveErrorKind(err) {
   if (typeof err === "number") return "connection";
   if (err?.code === "invalid_format") return "invalid";

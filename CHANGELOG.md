@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.4.2 (2026-10-08)
+
+- A refused save always said "a group name, icon or colour is not valid", whatever the real reason (#39). The message now says Home Assistant refused the layout and shows the reason on a details line under it.
+- Sidebar items whose address has characters other than letters, digits, `-` and `_` (some custom panels) no longer make the whole save fail: they are left out of the layout and keep Home Assistant's own place.
+
 ## v0.4.1 (2026-10-06)
 
 - Editor: the group name had almost no room next to the new tabs button, so it could not be read or edited. The name now has the whole row; **Tabs**, **Starts open** and **Ungroup** are labelled buttons on a line under it.
