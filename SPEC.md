@@ -217,3 +217,43 @@ edited in the in-sidebar editor, validated by `layout.py` and mirrored in `layou
   Query lives in the page only. Pinned icons are not filtered.
 - Pages are HA's own: no iframe, no panel created by us. A dashboard with several views shows its own view
   tabs under the strip (two levels, styled apart).
+- v0.5 replaces the resolver styling above (see §9.4).
+
+## 9. v0.5: links, item options, search, phone tab bar
+
+### 9.1 Links
+- `links: { id: { name, icon, url, new_tab } }` (id `[a-z0-9]{1,16}`, at most 50). A link is placed like a panel
+  whose path is `l:<id>` (order, a group's `panels`, `grid`); every link must be placed exactly once.
+- `url`: `/path` of this HA (not `//`, no `\`) or `http(s)://host...`; no spaces, control or format characters;
+  at most 2000. Typed input is normalised (`config/x` -> `/config/x`, `example.com` -> `https://example.com`,
+  this HA's own origin stripped). Web addresses always open in a new tab; `new_tab` does it for an HA page.
+- Drawn with HA's own `_renderPanel` for a stand-in path `esp-link-<id>`; `afterUpdate` sets the row's `href`,
+  `target`, `rel` (Lit keeps them: its committed stand-in value does not change). Selected: the internal link
+  with the longest path match of `location.pathname` (re-rendered on `location-changed` / `popstate`).
+- Editor: **Add link** opens the new row's options on its address; Done refuses a link without a valid address
+  (focus + message). Links have no eye (not HA panels); they are deleted from their options.
+
+### 9.2 Item options (`items`)
+- `items: { "<panel path>" | "l:<id>" | "g:<id>": { badge, show_when, aliases } }`; entity ids
+  `[a-z0-9_]{1,64}.[a-z0-9_]{1,255}` or null; aliases at most 100 characters, spaces collapsed; empty entries dropped.
+- Badge: positive number -> count (`99+` cap); other active state -> dot; `off`, `closed`, `locked`, `unavailable`,
+  `unknown`, `idle`, `standby`, `not_home`, `disarmed`, `docked`, `paused`, 0, negative -> nothing. Rows get HA's
+  `.badge` spans (start for the rail, end for the expanded sidebar). A group's own badge wins; otherwise a folded or
+  tabbed group shows its members' badges added up (dot when only dots).
+- `show_when`: the entry (a whole group: all its members) is left out while the entity is not active.
+- The sidebar re-renders when a watched entity's state object changes (`shouldUpdate`).
+- Editor: ⋮ on each row (More on a group) opens one options block at a time: Move to (top level, a group, pinned),
+  link fields, badge, show only when, search words. Fields commit on Enter / change in place (no re-render).
+
+### 9.3 Search
+- Words per row: shown name, HA's untranslated `panel.title`, `url_path`; links: name and address; plus `aliases`.
+- Dashboard views (`lovelace/config` of the shown dashboards, fetched when a search starts, kept 5 minutes):
+  titled, non-subview views of dashboards with two or more views, visible to the user; rows "View · Dashboard"
+  after the entries, at most 8; `/dash/view`.
+
+### 9.4 Tab strip placement
+- No transform (it made the header and the strip scroll away on long pages). The strip is `position: fixed`, at
+  its static horizontal place, `width: var(--ha-top-app-bar-width)`. HA's panels pad by the safe-area insets, so the
+  resolver gets `--safe-area-inset-top` (wide) or `--safe-area-inset-bottom` (narrow) plus 48 px, computed from
+  `--esp-inset-*` set on the drawer (a property cannot refer to itself). Narrow (`ha-sidebar[narrow]`): a bottom bar,
+  z-index 4 (below the modal drawer's scrim); wide: top, z-index 5 (above HA's header, 4).

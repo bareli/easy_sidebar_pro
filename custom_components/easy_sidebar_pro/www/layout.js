@@ -6,8 +6,18 @@
 //                   The bottom grid is a group-like node with `pins: true` (id PINS_ID), always last.
 //                   A `tabbed` group is one sidebar row; its panels open as tabs of one page.
 // Keys:             "p:<path>" for a panel, "g:<id>" for a group.
+// Links (v0.5):     `links: { id: { name, icon, url, new_tab } }`; a link is placed like a panel whose path is
+//                   "l:<id>" (in order, a group or the grid), so moving, grouping, pinning and tabs treat it as one.
+// Extras (v0.5):    `items: { "<path>" | "l:<id>" | "g:<id>": { badge, show_when, aliases } }` (entity ids, search words).
 
 export const GROUP_PREFIX = "g:";
+export const LINK_PREFIX = "l:";
+export const MAX_LINKS = 50;
+export const MAX_URL = 2000;
+export const MAX_ALIASES = 100;
+// Same lists as const.py LINK_KEYS / ITEM_KEYS.
+export const LINK_KEYS = ["name", "icon", "url", "new_tab"];
+export const ITEM_KEYS = ["badge", "show_when", "aliases"];
 export const LAYOUT_VERSION = 1;
 export const MAX_NAME = 50;
 export const MAX_PINNED = 20;
@@ -35,6 +45,8 @@ const newGroup = (id, name, children) => ({ type: "group", id, name, icon: null,
  * the pins node at the end, which exists when something is pinned or `withPins` asks for it (editor).
  */
 export function buildTree(layout, paths, withPins = false) {
+  // Links exist wherever the layout defines them; one not placed yet goes to the end like a new panel.
+  paths = [...paths, ...linkPaths(layout).filter((p) => !paths.includes(p))];
   const known = new Set(paths);
   const placed = new Set();
   const tree = [];
@@ -70,11 +82,159 @@ export function buildTree(layout, paths, withPins = false) {
 const PANEL_RE = /^[A-Za-z0-9_-]{1,100}$/;
 export const validPanel = (path) => typeof path === "string" && PANEL_RE.test(path);
 
-export function toLayout(tree, settings) {
+/* ------------------------------------------------------------------ links and extras */
+
+const ID_RE = /^[a-z0-9]{1,16}$/;
+export const isLink = (path) => typeof path === "string" && path.startsWith(LINK_PREFIX);
+export const linkPath = (id) => `${LINK_PREFIX}${id}`;
+export const linkId = (path) => (isLink(path) ? path.slice(LINK_PREFIX.length) : null);
+/** "l:<id>" of every link a layout defines. */
+export const linkPaths = (layout) => Object.keys(layout?.links ?? {}).filter((id) => ID_RE.test(id)).map(linkPath);
+
+// Same rules as layout.py URL_INTERNAL / URL_EXTERNAL: a page of this Home Assistant or an http(s) address.
+const URL_INTERNAL = /^\/(?![/\\])\S*$/;
+const URL_EXTERNAL = /^https?:\/\/[^\s/\\?#]+\S*$/i;
+export function validUrl(value) {
+  if (typeof value !== "string" || !value.length || value.length > MAX_URL || value.includes("\\") || /[\p{C}\p{Z}]/u.test(value)) return false;
+  return URL_INTERNAL.test(value) || URL_EXTERNAL.test(value);
+}
+export const isExternal = (url) => /^https?:\/\//i.test(url ?? "");
+
+/**
+ * What a user typed as an address, normalised: trimmed; "config/automation" -> "/config/automation";
+ * "example.com" -> "https://example.com"; a full address of this Home Assistant -> its path.
+ * Returns null when it is not a usable address.
+ */
+export function normalizeUrl(value, origin = null) {
+  let text = String(value ?? "").trim();
+  if (!text) return null;
+  if (origin && text.toLowerCase().startsWith(origin.toLowerCase())) text = text.slice(origin.length) || "/";
+  if (!text.startsWith("/") && !/^[a-z][a-z0-9+.-]*:/i.test(text)) text = /^[^/\s]+\.[a-z]{2,}(?:[:/?#]|$)/i.test(text) || /^\d+\.\d+\.\d+\.\d+/.test(text) ? `https://${text}` : `/${text}`;
+  return validUrl(text) ? text : null;
+}
+
+/**
+ * The link whose page is open: an internal link matches its own path and the pages under it (query and
+ * hash ignored); the longest match wins, so "/lovelace/cameras" beats "/lovelace". Returns "l:<id>" or null.
+ */
+export function linkAt(links, pathname) {
+  let best = null;
+  let len = -1;
+  for (const [id, link] of Object.entries(links ?? {})) {
+    const url = link?.url;
+    if (typeof url !== "string" || isExternal(url)) continue;
+    const base = url.split(/[?#]/)[0].replace(/\/+$/, "") || "/";
+    const hit = pathname === base || (base !== "/" && pathname.startsWith(`${base}/`));
+    if (hit && base.length > len) {
+      best = linkPath(id);
+      len = base.length;
+    }
+  }
+  return best;
+}
+
+const ENTITY_RE = /^[a-z0-9_]{1,64}\.[a-z0-9_]{1,255}$/;
+export const validEntity = (value) => typeof value === "string" && ENTITY_RE.test(value);
+
+/** Search words as stored: control characters dropped, spaces collapsed, at most MAX_ALIASES characters. */
+export function cleanAliases(value) {
+  return String(value ?? "")
+    .replace(/[\p{Cc}\p{Cf}]/gu, (c) => (ALLOWED_FORMAT.has(c) ? c : ""))
+    .split(/\s+/)
+    .filter(Boolean)
+    .join(" ")
+    .slice(0, MAX_ALIASES)
+    .trim();
+}
+
+/** An entry's extras with defaults, or null when it has none. */
+export function cleanItem(item) {
+  const out = {
+    badge: validEntity(item?.badge) ? item.badge : null,
+    show_when: validEntity(item?.show_when) ? item.show_when : null,
+    aliases: cleanAliases(item?.aliases),
+  };
+  return out.badge || out.show_when || out.aliases ? out : null;
+}
+
+/** A link as stored, or null when it cannot be saved (no name or no valid address). */
+export function cleanLink(link) {
+  const name = cleanName(link?.name);
+  if (!name || !validUrl(link?.url)) return null;
+  return { name, icon: validIcon(link?.icon) ? link.icon : null, url: link.url, new_tab: link?.new_tab === true };
+}
+
+// Entity states that count as "nothing to show" for a badge or a show-only-when condition.
+const INACTIVE = new Set(["off", "closed", "locked", "unavailable", "unknown", "idle", "standby", "not_home", "disarmed", "docked", "paused", "none", "false", ""]);
+
+/**
+ * What a badge entity shows: a positive number -> { count }; another active state -> { dot: true };
+ * zero, a negative number, an inactive state (off, closed, unavailable, ...) or no entity -> null.
+ */
+export function badgeOf(stateObj) {
+  if (!stateObj || typeof stateObj.state !== "string") return null;
+  const s = stateObj.state.trim();
+  const n = s === "" ? NaN : Number(s);
+  if (Number.isFinite(n)) return n > 0 ? { count: n } : null;
+  return INACTIVE.has(s.toLowerCase()) ? null : { dot: true };
+}
+
+export const entityActive = (stateObj) => badgeOf(stateObj) !== null;
+
+/** Badges of a folded group's members combined: their counts summed; a dot when only dots are active. */
+export function rollup(badges) {
+  let sum = 0;
+  let dot = false;
+  for (const b of badges) {
+    if (b?.count) sum += b.count;
+    else if (b?.dot) dot = true;
+  }
+  return sum > 0 ? { count: sum } : dot ? { dot: true } : null;
+}
+
+/** Badge text: whole numbers, at most "99+". */
+export const badgeText = (badge) => (badge?.count ? (badge.count > 99 ? "99+" : String(Math.max(1, Math.round(badge.count)))) : "");
+
+/**
+ * Panel and link paths a "show only when" condition hides now. `active(entityId)` says whether an
+ * entity is on. A hidden group hides every member.
+ */
+export function hiddenByCondition(layout, active) {
+  const out = new Set();
+  for (const [key, item] of Object.entries(layout?.items ?? {})) {
+    if (!validEntity(item?.show_when) || active(item.show_when)) continue;
+    if (key.startsWith(GROUP_PREFIX)) for (const p of layout.groups?.[key.slice(GROUP_PREFIX.length)]?.panels ?? []) out.add(p);
+    else out.add(key);
+  }
+  return out;
+}
+
+/** Entity ids a layout's badges and conditions read (the sidebar re-renders when one of them changes). */
+export function watchedEntities(layout) {
+  const out = new Set();
+  for (const item of Object.values(layout?.items ?? {})) for (const k of ["badge", "show_when"]) if (validEntity(item?.[k])) out.add(item[k]);
+  return [...out];
+}
+
+/** The layout key of an extras entry for a tree key ("p:<path>" -> path, "g:<id>" stays). */
+export const itemKey = (key) => (key.startsWith("p:") ? key.slice(2) : key);
+
+export function toLayout(tree, settings, meta = {}) {
   const order = [];
   const groups = {};
   let grid = [];
-  const paths = (children) => children.map((c) => c.path).filter(validPanel);
+  const links = {};
+  const defined = meta.links ?? {};
+  // A link is saved when it is placed and complete; anything else is left out rather than refused.
+  const valid = (path) => {
+    if (!isLink(path)) return validPanel(path);
+    const id = linkId(path);
+    if (!ID_RE.test(id) || !defined[id] || links[id]) return false;
+    const link = cleanLink(defined[id]);
+    if (link) links[id] = link;
+    return !!link;
+  };
+  const paths = (children) => children.map((c) => c.path).filter(valid);
   for (const n of tree) {
     if (isPins(n)) grid = paths(n.children);
     else if (n.type === "group") {
@@ -88,12 +248,22 @@ export function toLayout(tree, settings) {
         tabbed: n.tabbed === true,
         panels: paths(n.children),
       };
-    } else if (validPanel(n.path)) {
+    } else if (valid(n.path)) {
       order.push(n.path);
     }
   }
-  return { version: LAYOUT_VERSION, order, groups, grid, settings: cleanSettings(settings) };
+  // Extras of panels not shown right now (a stopped add-on) are kept, like their places.
+  const items = {};
+  for (const [key, item] of Object.entries(meta.items ?? {})) {
+    const ok = key.startsWith(GROUP_PREFIX) ? !!groups[key.slice(GROUP_PREFIX.length)] : isLink(key) ? !!links[linkId(key)] : validPanel(key);
+    const clean = ok ? cleanItem(item) : null;
+    if (clean) items[key] = clean;
+  }
+  return { version: LAYOUT_VERSION, order, groups, grid, settings: cleanSettings(settings), links, items };
 }
+
+/** The editor's links and extras from a stored layout: a deep copy (the editor changes them in place). */
+export const metaOf = (layout) => JSON.parse(JSON.stringify({ links: layout?.links ?? {}, items: layout?.items ?? {} }));
 
 /** Settings with defaults for anything missing or invalid (the server refuses invalid ones). */
 export function cleanSettings(value) {
@@ -181,30 +351,37 @@ export const searchText = (value) =>
     .replace(/\p{M}/gu, "")
     .toLocaleLowerCase();
 
+export const MAX_VIEW_RESULTS = 8;
+
 /**
- * Rows for the sidebar search: names containing `query` (`titles`: path -> shown name). A panel shows
- * when its name matches; a group shows, unfolded, with its matching panels (all of them when the
- * group's own name matches); a tabbed group shows as its one row when its name or any of its panels
- * match (`match`: the first matching panel, the tab it opens; null when the group's name matched). Folding is ignored. An empty query gives `arrange`'s rows.
+ * Rows for the sidebar search: entries whose words contain `query`. `titles`: path -> the shown name or a
+ * list of words (shown name, HA's own untranslated title, the path); each entry's search words (`items`)
+ * count too. A panel shows when it matches; a group shows, unfolded, with its matching panels (all of
+ * them when the group itself matches); a tabbed group shows as its one row when it or any of its panels
+ * match (`match`: the first matching panel, the tab it opens; null when the group matched). Folding is
+ * ignored. `views` ({ path: "dash/view", dash, title }) of shown dashboards follow as `view` rows (at most
+ * MAX_VIEW_RESULTS). An empty query gives `arrange`'s rows.
  */
-export function searchRows(layout, visible, titles, query, selected, collapsed = []) {
+export function searchRows(layout, visible, titles, query, selected, collapsed = [], views = []) {
   const q = searchText(query).trim();
   if (!q) return arrange(layout, visible, collapsed, selected);
   const hit = (text) => searchText(text).includes(q);
-  const name = (path) => titles.get(path) ?? path;
+  const aliases = (key) => layout?.items?.[key]?.aliases ?? "";
+  const words = (path) => [titles.get(path) ?? path, aliases(path)].flat();
+  const matches = (path) => words(path).some(hit);
   const shown = new Set(visible);
   const rows = [];
   for (const n of buildTree(layout, visible)) {
     if (n.type === "panel") {
-      if (shown.has(n.path) && hit(name(n.path))) rows.push({ type: "panel", path: n.path, group: null });
+      if (shown.has(n.path) && matches(n.path)) rows.push({ type: "panel", path: n.path, group: null });
       continue;
     }
     if (isPins(n)) continue;
     const kids = n.children.filter((c) => shown.has(c.path)).map((c) => c.path);
     if (!kids.length) continue;
     const tabbed = n.tabbed === true;
-    const byName = hit(n.name);
-    const matched = byName ? kids : kids.filter((p) => hit(name(p)));
+    const byName = hit(n.name) || hit(aliases(groupKey(n.id)));
+    const matched = byName ? kids : kids.filter(matches);
     if (!matched.length) continue;
     rows.push({
       type: "group",
@@ -222,13 +399,37 @@ export function searchRows(layout, visible, titles, query, selected, collapsed =
     });
     if (!tabbed) matched.forEach((p, i) => rows.push({ type: "panel", path: p, group: n.id, last: i === matched.length - 1 }));
   }
+  let n = 0;
+  for (const v of views) {
+    if (n >= MAX_VIEW_RESULTS) break;
+    if (!shown.has(v.dash) || !hit(v.title)) continue;
+    rows.push({ type: "view", path: v.path, dash: v.dash, title: v.title, icon: v.icon ?? null });
+    n++;
+  }
   return rows;
+}
+
+/**
+ * Views of a dashboard config a search can open: { path: "<dash>/<view path or index>", dash, title, icon }.
+ * Dashboards with one view, subviews, untitled views and views hidden from `userId` are left out.
+ */
+export function dashboardViews(dash, config, userId) {
+  const views = Array.isArray(config?.views) ? config.views : [];
+  if (views.length < 2) return [];
+  const out = [];
+  views.forEach((v, i) => {
+    if (!v || typeof v.title !== "string" || !v.title.trim() || v.subview === true) return;
+    if (v.visible === false || (Array.isArray(v.visible) && !v.visible.some((u) => u?.user === userId))) return;
+    const path = typeof v.path === "string" && /^[A-Za-z0-9_-]+$/.test(v.path) ? v.path : String(i);
+    out.push({ path: `${dash}/${path}`, dash, title: v.title.trim(), icon: typeof v.icon === "string" ? v.icon : null });
+  });
+  return out;
 }
 
 /** What Enter in the search opens: the first panel shown, or the tab to open for a tabbed group. */
 export function firstResult(rows, lastTab = new Map()) {
   for (const r of rows) {
-    if (r.type === "panel") return r.path;
+    if (r.type === "panel" || r.type === "view") return r.path;
     if (r.tabbed) return r.match ?? tabTarget(r.paths, lastTab.get(r.id));
   }
   return null;
@@ -323,6 +524,33 @@ export function merge(tree, key, targetKey, id, name) {
 
 export function addGroup(tree, id, name) {
   return [newGroup(id, name, []), ...clone(tree)];
+}
+
+/** A new link row at the top of the list. */
+export const addLink = (tree, id) => [{ type: "panel", path: linkPath(id) }, ...clone(tree)];
+
+/** Remove a panel or link row from wherever it is. */
+export function removeEntry(tree, key) {
+  const next = clone(tree);
+  return take(next, key) ? next : tree;
+}
+
+/**
+ * "Move to" for a panel or link: `dest` null = the top level (at its end, above the pinned area), a group
+ * id = the end of that group, PINS_ID = the end of the pinned area (refused when full). Groups do not move here.
+ */
+export function moveTo(tree, key, dest) {
+  const at = locate(tree, key);
+  if (!at || at.node.type !== "panel" || at.group === dest) return tree;
+  if (dest === null) {
+    const next = clone(tree);
+    take(next, key);
+    const pins = next.findIndex(isPins);
+    next.splice(pins < 0 ? next.length : pins, 0, at.node);
+    return next;
+  }
+  if (groupIndex(tree, dest) < 0) return tree;
+  return move(tree, key, groupKey(dest), "into");
 }
 
 /** Dissolve a group; its panels take its place. */
@@ -471,16 +699,16 @@ export function adoptOrder(layout, order) {
 }
 
 /** Whether the editor holds anything to save: the layout (with settings) or the hidden set differ from when it opened. */
-export function editChanged(baseTree, tree, baseHidden, hidden, baseSettings, settings) {
-  if (JSON.stringify(toLayout(baseTree, baseSettings)) !== JSON.stringify(toLayout(tree, settings))) return true;
+export function editChanged(baseTree, tree, baseHidden, hidden, baseSettings, settings, baseMeta = {}, meta = {}) {
+  if (JSON.stringify(toLayout(baseTree, baseSettings, baseMeta)) !== JSON.stringify(toLayout(tree, settings, meta))) return true;
   if (baseHidden.size !== hidden.size) return true;
   for (const p of hidden) if (!baseHidden.has(p)) return true;
   return false;
 }
 
 /** What Done would save: "none", "hidden-only" (only the hide/show set differs) or "structure" (order, groups, names, icons, colours, pins, settings). */
-export function editKind(baseTree, tree, baseHidden, hidden, baseSettings, settings) {
-  if (JSON.stringify(toLayout(baseTree, baseSettings)) !== JSON.stringify(toLayout(tree, settings))) return "structure";
+export function editKind(baseTree, tree, baseHidden, hidden, baseSettings, settings, baseMeta = {}, meta = {}) {
+  if (JSON.stringify(toLayout(baseTree, baseSettings, baseMeta)) !== JSON.stringify(toLayout(tree, settings, meta))) return "structure";
   return editChanged(baseTree, tree, baseHidden, hidden) ? "hidden-only" : "none";
 }
 

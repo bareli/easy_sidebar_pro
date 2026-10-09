@@ -10,16 +10,26 @@ from .const import (
     DIVIDER_STYLES,
     GROUP_PREFIX,
     HEADER_STYLES,
+    ITEM_KEYS,
     LAYOUT_VERSION,
+    LINK_KEYS,
+    LINK_PREFIX,
+    MAX_ALIASES,
     MAX_ENTRIES,
     MAX_GROUPS,
+    MAX_LINKS,
     MAX_NAME,
     MAX_PINNED,
+    MAX_URL,
     NAMED_COLORS,
 )
 
 GROUP_ID = re.compile(r"[a-z0-9]{1,16}")
 PANEL = re.compile(r"[A-Za-z0-9_-]{1,100}")
+ENTITY_ID = re.compile(r"[a-z0-9_]{1,64}\.[a-z0-9_]{1,255}")
+# A link opens a page of this Home Assistant ("/config/automation") or a web address (http / https only).
+URL_INTERNAL = re.compile(r"/(?![/\\])\S*")
+URL_EXTERNAL = re.compile(r"https?://[^\s/\\?#]+\S*", re.IGNORECASE)
 ICON = re.compile(r"[a-z0-9_-]{1,20}:[a-z0-9_-]{1,64}")
 HEX_COLOR = re.compile(r"#[0-9a-fA-F]{6}|#[0-9a-fA-F]{3}")
 # `prefix:name` icon sets stay open (mdi, hass, custom sets), but URI schemes are never icon sets.
@@ -108,6 +118,86 @@ def _panel(value: Any, where: str) -> str:
     return value
 
 
+def _url(value: Any, where: str) -> str:
+    if not isinstance(value, str) or not 1 <= len(value) <= MAX_URL:
+        raise LayoutError(f"{where}: address must be 1-{MAX_URL} characters")
+    if "\\" in value or any(unicodedata.category(c)[0] in "CZ" for c in value):
+        raise LayoutError(f"{where}: address contains spaces or control characters")
+    if not (URL_INTERNAL.fullmatch(value) or URL_EXTERNAL.fullmatch(value)):
+        raise LayoutError(f"{where}: address must start with / or http(s)://")
+    return value
+
+
+def _entity(value: Any, where: str) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or not ENTITY_ID.fullmatch(value):
+        raise LayoutError(f"{where}: invalid entity id")
+    return value
+
+
+def _aliases(value: Any, where: str) -> str:
+    if value is None:
+        return ""
+    if not isinstance(value, str) or len(value) > MAX_ALIASES:
+        raise LayoutError(f"{where}: search words must be text of at most {MAX_ALIASES} characters")
+    if any(unicodedata.category(c) == "Cc" or (unicodedata.category(c) == "Cf" and c not in _ALLOWED_FORMAT) for c in value):
+        raise LayoutError(f"{where}: search words contain control characters")
+    return " ".join(value.split())
+
+
+def _links(data: Any) -> dict[str, dict[str, Any]]:
+    if not isinstance(data, dict):
+        raise LayoutError("links must be an object")
+    if len(data) > MAX_LINKS:
+        raise LayoutError(f"at most {MAX_LINKS} links")
+    out: dict[str, dict[str, Any]] = {}
+    for lid, link in data.items():
+        where = f"links[{lid!r}]"
+        if not isinstance(lid, str) or not GROUP_ID.fullmatch(lid):
+            raise LayoutError(f"{where}: invalid link id")
+        if not isinstance(link, dict) or set(link) - set(LINK_KEYS):
+            raise LayoutError(f"{where}: link must be an object with known keys")
+        out[lid] = {
+            "name": _name(link.get("name"), where),
+            "icon": _icon(link.get("icon"), f"{where}.icon"),
+            "url": _url(link.get("url"), f"{where}.url"),
+            "new_tab": _flag(link.get("new_tab", False), f"{where}.new_tab"),
+        }
+    return out
+
+
+def _items(data: Any, groups: dict[str, Any], links: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Per-entry extras (badge entity, show-only-when entity, search words); empty entries are dropped."""
+    if not isinstance(data, dict):
+        raise LayoutError("items must be an object")
+    if len(data) > MAX_ENTRIES:
+        raise LayoutError(f"at most {MAX_ENTRIES} items")
+    out: dict[str, dict[str, Any]] = {}
+    for key, item in data.items():
+        where = f"items[{key!r}]"
+        if not isinstance(key, str):
+            raise LayoutError(f"{where}: invalid key")
+        if key.startswith(GROUP_PREFIX):
+            if key[len(GROUP_PREFIX):] not in groups:
+                raise LayoutError(f"{where}: unknown group")
+        elif key.startswith(LINK_PREFIX):
+            if key[len(LINK_PREFIX):] not in links:
+                raise LayoutError(f"{where}: unknown link")
+        else:
+            _panel(key, where)
+        if not isinstance(item, dict) or set(item) - set(ITEM_KEYS):
+            raise LayoutError(f"{where}: item must be an object with known keys")
+        clean = {
+            "badge": _entity(item.get("badge"), f"{where}.badge"),
+            "show_when": _entity(item.get("show_when"), f"{where}.show_when"),
+            "aliases": _aliases(item.get("aliases"), f"{where}.aliases"),
+        }
+        if clean["badge"] or clean["show_when"] or clean["aliases"]:
+            out[key] = clean
+    return out
+
+
 def validate_layout(data: Any) -> dict[str, Any]:
     """Return a clean copy of a layout, or raise LayoutError."""
     if not isinstance(data, dict):
@@ -131,9 +221,24 @@ def validate_layout(data: Any) -> dict[str, Any]:
     if len(grid) > MAX_PINNED:
         raise LayoutError(f"at most {MAX_PINNED} pinned panels")
     settings = validate_settings(data.get("settings"))
+    links = _links(data.get("links", {}))
 
     seen_panels: set[str] = set()
     seen_groups: set[str] = set()
+
+    def member(value: Any, where: str) -> str:
+        """A panel path or a link (`l:<id>`), placed at most once in the whole layout."""
+        if isinstance(value, str) and value.startswith(LINK_PREFIX):
+            if value[len(LINK_PREFIX):] not in links:
+                raise LayoutError(f"{where}: unknown link {value!r}")
+            entry = value
+        else:
+            entry = _panel(value, where)
+        if entry in seen_panels:
+            raise LayoutError(f"{where}: {entry!r} listed twice")
+        seen_panels.add(entry)
+        return entry
+
     total = 0
     clean_order: list[str] = []
     for i, entry in enumerate(order):
@@ -146,10 +251,7 @@ def validate_layout(data: Any) -> dict[str, Any]:
                 raise LayoutError(f"{where}: group {gid!r} listed twice")
             seen_groups.add(gid)
         else:
-            panel = _panel(entry, where)
-            if panel in seen_panels:
-                raise LayoutError(f"{where}: panel {panel!r} listed twice")
-            seen_panels.add(panel)
+            member(entry, where)
         clean_order.append(entry)
         total += 1
 
@@ -170,11 +272,7 @@ def validate_layout(data: Any) -> dict[str, Any]:
             raise LayoutError(f"at most {MAX_ENTRIES} entries")
         clean_panels = []
         for j, value in enumerate(panels):
-            panel = _panel(value, f"{where}.panels[{j}]")
-            if panel in seen_panels:
-                raise LayoutError(f"{where}.panels[{j}]: panel {panel!r} listed twice")
-            seen_panels.add(panel)
-            clean_panels.append(panel)
+            clean_panels.append(member(value, f"{where}.panels[{j}]"))
             total += 1
         clean_groups[gid] = {
             "name": _name(group.get("name"), where),
@@ -188,16 +286,24 @@ def validate_layout(data: Any) -> dict[str, Any]:
 
     clean_grid: list[str] = []
     for i, value in enumerate(grid):
-        panel = _panel(value, f"grid[{i}]")
-        if panel in seen_panels:
-            raise LayoutError(f"grid[{i}]: panel {panel!r} listed twice")
-        seen_panels.add(panel)
-        clean_grid.append(panel)
+        clean_grid.append(member(value, f"grid[{i}]"))
         total += 1
 
     if total > MAX_ENTRIES:
         raise LayoutError(f"at most {MAX_ENTRIES} entries")
-    return {"version": LAYOUT_VERSION, "order": clean_order, "groups": clean_groups, "grid": clean_grid, "settings": settings}
+    for lid in links:
+        if f"{LINK_PREFIX}{lid}" not in seen_panels:
+            raise LayoutError(f"links[{lid!r}]: link is not placed in the layout")
+    items = _items(data.get("items", {}), clean_groups, links)
+    return {
+        "version": LAYOUT_VERSION,
+        "order": clean_order,
+        "groups": clean_groups,
+        "grid": clean_grid,
+        "settings": settings,
+        "links": links,
+        "items": items,
+    }
 
 
 def validate_collapsed(data: Any) -> list[str]:

@@ -139,6 +139,9 @@ class FakeSidebar extends FakeEl {
 }
 Object.assign(globalThis, {
   window: globalThis,
+  addEventListener: () => {},
+  removeEventListener: () => {},
+  location: { pathname: "/lovelace/0", origin: "http://ha.local" },
   HTMLElement: FakeEl,
   CSSStyleSheet: class {
     replaceSync() {}

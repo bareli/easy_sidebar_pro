@@ -21,8 +21,8 @@ test("#36 hide_count: editor checkbox, both languages, passed to the group heade
   assert.equal(SRC.match(/^\s+hideCount: "/gm).length, 2);
   assert.match(SRC, /this\.settings\.header, this\.settings\.hide_count\)/);
   assert.match(SRC, /collapsed && !hideCount \? String\(row\.count\) : ""/);
-  // The screen-reader name keeps the count.
-  assert.match(SRC, /aria-label", `\$\{row\.name\}, \$\{count\}`/);
+  // The screen-reader name keeps the count (and a badge after it, v0.5).
+  assert.match(SRC, /aria-label", `\$\{row\.name\}, \$\{count\}\$\{said\}`/);
 });
 
 test("#37 group header rows take HA's item width: 248 px expanded, 240 px in the narrow drawer", () => {
@@ -32,6 +32,6 @@ test("#37 group header rows take HA's item width: 248 px expanded, 240 px in the
 });
 
 test("editor hint names the eye button (hide / show), both languages", () => {
-  assert.match(SRC, /hint: "Drag a row onto another row to make a group\. The eye button hides or shows an item\.",/);
-  assert.match(SRC, /hint: "גררו שורה אל שורה אחרת כדי ליצור קבוצה\. כפתור העין מסתיר או מציג פריט\.",/);
+  assert.match(SRC, /hint: "Drag a row onto another row to make a group\. The eye button hides or shows an item; the ⋮ button has more options\.",/);
+  assert.match(SRC, /hint: "גררו שורה אל שורה אחרת כדי ליצור קבוצה\. כפתור העין מסתיר או מציג פריט; בכפתור ⋮ יש אפשרויות נוספות\.",/);
 });
