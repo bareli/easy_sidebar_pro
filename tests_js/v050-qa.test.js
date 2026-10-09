@@ -62,3 +62,24 @@ test("#44 name, address and search word fields use the code point limiter, not m
   assert.match(SRC, /limit: L\.MAX_ALIASES,/);
   assert.match(SRC, /if \(limit\) limitInput\(e\.target, limit\)/);
 });
+
+/* ---- #46 BUG-022: host with a port typed without a scheme ---- */
+
+test("#46 a host name with a port gets https:// like a domain or an IP", () => {
+  for (const [typed, want] of [
+    ["nas.local:5000", "https://nas.local:5000"],
+    ["homeassistant.local:8123", "https://homeassistant.local:8123"],
+    ["homeassistant.local:8123/x", "https://homeassistant.local:8123/x"],
+    ["my-nas.lan:5000", "https://my-nas.lan:5000"],
+    ["192.168.1.251:5000", "https://192.168.1.251:5000"],
+    ["localhost:8123", "https://localhost:8123"],
+    ["nas.local:5000?a=1", "https://nas.local:5000?a=1"],
+    ["nas.local", "https://nas.local"],
+  ])
+    assert.equal(L.normalizeUrl(typed), want, typed);
+});
+
+test("#46 real schemes are still refused", () => {
+  for (const bad of ["javascript:alert(1)", "javascript:1", "mailto:a@b.com", "tel:0501234567", "tel:12345", "data:text/html,x", "vbscript:x", "ftp://nas.local:21", "file:///c:/x"])
+    assert.equal(L.normalizeUrl(bad), null, bad);
+});

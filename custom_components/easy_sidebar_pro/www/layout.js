@@ -126,11 +126,14 @@ export const isExternal = (url) => /^https?:\/\//i.test(url ?? "");
  * "example.com" -> "https://example.com"; a full address of this Home Assistant -> its path.
  * Returns null when it is not a usable address.
  */
+const HOST_PORT = /^(?:localhost|[a-z0-9-]+(?:\.[a-z0-9-]+)+):\d{1,5}(?:[/?#]|$)/i;
 export function normalizeUrl(value, origin = null) {
   let text = stripSurrogates(String(value ?? "")).trim();
   if (!text) return null;
   if (origin && text.toLowerCase().startsWith(origin.toLowerCase())) text = text.slice(origin.length) || "/";
-  if (!text.startsWith("/") && !/^[a-z][a-z0-9+.-]*:/i.test(text)) text = /^[^/\s]+\.[a-z]{2,}(?:[:/?#]|$)/i.test(text) || /^\d+\.\d+\.\d+\.\d+/.test(text) ? `https://${text}` : `/${text}`;
+  // "nas.local:5000", "localhost:8123/x": a host with a port, not a scheme (a scheme may contain dots).
+  if (HOST_PORT.test(text)) text = `https://${text}`;
+  else if (!text.startsWith("/") && !/^[a-z][a-z0-9+.-]*:/i.test(text)) text = /^[^/\s]+\.[a-z]{2,}(?:[:/?#]|$)/i.test(text) || /^\d+\.\d+\.\d+\.\d+/.test(text) ? `https://${text}` : `/${text}`;
   return validUrl(text) ? text : null;
 }
 
