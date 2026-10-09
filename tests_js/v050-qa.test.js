@@ -113,7 +113,7 @@ const strings = (lang) => {
 
 test("#45 an empty link name has its own message in both languages", () => {
   assert.match(strings("en"), /linkNameRequired: "Enter a link name",/);
-  assert.match(strings("he"), /linkNameRequired: "צריך שם לקישור",/);
+  assert.match(strings("he"), /linkNameRequired: "הזינו שם לקישור",/);
   assert.match(SRC, /if \(!name\) return t\(lang\(\), "linkNameRequired"\);\n\s+link\.name = name;/);
 });
 

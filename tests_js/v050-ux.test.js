@@ -67,3 +67,22 @@ test("#55 internet names get https://; a bare word stays a Home Assistant page",
   assert.equal(L.normalizeUrl("http://example.com"), "http://example.com");
   for (const bad of ["tel:12345", "sms:12345", "mailto:a@b.com", "javascript:alert(1)"]) assert.equal(L.normalizeUrl(bad), null, bad);
 });
+
+/* ---- #60 UX-018: Hebrew wording ---- */
+
+test("#60 the five Hebrew wording changes, plural imperative instead of 'יש ל'", () => {
+  assert.match(HE, /\n {4}badge: "מספר על הפריט \(ישות\)",/);
+  assert.match(HE, /\n {4}linkUrlInvalid: "הזינו כתובת של דף ב-Home Assistant \(מתחילה ב-\/\) או כתובת אינטרנט \(http או https\)",/);
+  assert.match(HE, /\n {4}undo: "בטל שינוי",/);
+  assert.match(HE, /\n {4}optMore: "אפשרויות נוספות",/);
+  assert.match(HE, /\n {4}entityInvalid: "הזינו מזהה ישות, /);
+  assert.match(HE, /\n {4}iconInvalid: "כתבו בצורה mdi:name",/);
+  assert.match(HE, /\n {4}nameRequired: "הזינו שם לקבוצה",/);
+  assert.doesNotMatch(HE, /יש ל(הזין|כתוב)|צריך שם|"עוד"|ישות לתג/);
+  // Undo is no longer the same word as Cancel.
+  assert.notEqual(HE.match(/\n {4}undo: "([^"]*)"/)[1], HE.match(/\n {4}cancel: "([^"]*)"/)[1]);
+});
+
+test("#60 the English address error names http or https", () => {
+  assert.match(EN, /\n {4}linkUrlInvalid: "Enter a Home Assistant page \(starting with \/\) or a web address \(http or https\)",/);
+});
