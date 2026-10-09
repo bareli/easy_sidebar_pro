@@ -83,3 +83,21 @@ test("#46 real schemes are still refused", () => {
   for (const bad of ["javascript:alert(1)", "javascript:1", "mailto:a@b.com", "tel:0501234567", "tel:12345", "data:text/html,x", "vbscript:x", "ftp://nas.local:21", "file:///c:/x"])
     assert.equal(L.normalizeUrl(bad), null, bad);
 });
+
+/* ---- #47 BUG-023: whitespace controls become a space ---- */
+
+test("#47 tab, newline, CR, VT, FF and line / paragraph separators become a space in names", () => {
+  assert.equal(L.cleanName("Living\tRoom סלון"), "Living Room סלון");
+  for (const c of ["\n", "\r", "\v", "\f", " ", " ", "\x1f", "\x85"]) assert.equal(L.cleanName(`a${c}b`), "a b", JSON.stringify(c));
+  assert.equal(L.cleanName("a\r\nb"), "a  b");
+  // inner spaces are kept as before; other control characters are still removed
+  assert.equal(L.cleanName("a  b"), "a  b");
+  assert.equal(L.cleanName("a\x00b\x07c"), "abc");
+  assert.equal(L.cleanName("\tname\t"), "name");
+});
+
+test("#47 search words: a tab separates words", () => {
+  assert.equal(L.cleanAliases("מילה   word\tתג"), "מילה word תג");
+  assert.equal(L.cleanAliases("a\tb c"), "a b c");
+  assert.equal(L.cleanAliases("a b\x00c"), "a bc");
+});

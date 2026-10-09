@@ -163,6 +163,7 @@ export const validEntity = (value) => typeof value === "string" && ENTITY_RE.tes
 /** Search words as stored: control characters dropped, spaces collapsed, at most MAX_ALIASES characters (code points). */
 export function cleanAliases(value) {
   const text = String(value ?? "")
+    .replace(SPACE_CONTROLS, " ")
     .replace(/[\p{Cc}\p{Cf}\p{Cs}]/gu, (c) => (ALLOWED_FORMAT.has(c) ? c : ""))
     .split(/\s+/)
     .filter(Boolean)
@@ -642,10 +643,14 @@ export function newGroupId(tree) {
 // Same rules as layout.py: control (Cc) and format (Cf) characters are not allowed, except the
 // joiners real text needs (ZWNJ, ZWJ); a name needs at least one visible character.
 const ALLOWED_FORMAT = new Set([String.fromCharCode(0x200c), String.fromCharCode(0x200d)]);
+// Whitespace controls and line / paragraph separators separate words: they become a space before the other
+// control characters are dropped (a pasted tab must not glue two words together).
+const SPACE_CONTROLS = /[\t\n\v\f\r\x1c-\x1f\x85\u2028\u2029]/g;
 
 /** A clean group name, or "" when nothing visible is left. */
 export function cleanName(value) {
   const text = String(value ?? "")
+    .replace(SPACE_CONTROLS, " ")
     .replace(/[\p{Cc}\p{Cf}\p{Cs}]/gu, (c) => (ALLOWED_FORMAT.has(c) ? c : ""))
     .trim();
   const name = cpSlice(text, MAX_NAME).trim();
