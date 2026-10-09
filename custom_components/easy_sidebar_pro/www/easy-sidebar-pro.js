@@ -707,8 +707,19 @@ button { font: inherit; color: inherit; }
 .row.link .title { font-style: italic; }
 `;
 
+/**
+ * Keep a text field within `max` code points, as the server counts (`maxlength` counts UTF-16 units, so it
+ * allowed 25 emoji where the server takes 50 and could leave half an emoji). The caret stays after the kept text.
+ */
+function limitInput(input, max) {
+  const { value, caret } = L.limitText(input.value, input.selectionStart, max);
+  if (value === input.value) return;
+  input.value = value;
+  input.setSelectionRange?.(caret, caret);
+}
+
 /** One labelled text field of the ⋮ options: commits on Enter or when it loses focus; `commit` returns an error text or "". */
-function optField({ label, help = null, value, focusKey, dir = null, list = null, maxlength = null, placeholder = null, commit }) {
+function optField({ label, help = null, value, focusKey, dir = null, list = null, limit = null, placeholder = null, commit }) {
   const errId = `err-${focusKey.replace(/[^A-Za-z0-9_-]/g, "_")}`;
   const helpId = help ? `help-${errId}` : null;
   const error = h("div", { class: "error", id: errId, role: "alert" });
@@ -727,7 +738,6 @@ function optField({ label, help = null, value, focusKey, dir = null, list = null
         type: "text",
         dir,
         list,
-        maxlength,
         placeholder,
         spellcheck: "false",
         autocomplete: "off",
@@ -735,6 +745,7 @@ function optField({ label, help = null, value, focusKey, dir = null, list = null
         "data-focus-key": focusKey,
         ".value": value ?? "",
         oninput: (e) => {
+          if (limit) limitInput(e.target, limit);
           e.target.removeAttribute("aria-invalid");
           error.textContent = "";
         },
@@ -1029,12 +1040,12 @@ class EspEditor extends HTMLElement {
     const input = h("input", {
       class: "name-input",
       type: "text",
-      maxlength: String(L.MAX_NAME),
       "aria-label": t(lang, "groupName"),
       "aria-describedby": `name-err-${node.id}`,
       "aria-invalid": pending === undefined ? null : "true",
       "data-focus-key": `name:${node.id}`,
       ".value": pending ?? node.name,
+      oninput: (e) => limitInput(e.target, L.MAX_NAME),
       onchange: (e) => this.actions.rename(node.id, e.target),
       onkeydown: (e) => {
         if (e.key !== "Enter") return;
@@ -1447,7 +1458,7 @@ class EspEditor extends HTMLElement {
           label: t(lang, "linkName"),
           value: link.name,
           focusKey: fk("name"),
-          maxlength: String(L.MAX_NAME),
+          limit: L.MAX_NAME,
           commit: (input) => this.actions.setLink(id, "name", input.value),
         }),
         optField({
@@ -1456,7 +1467,7 @@ class EspEditor extends HTMLElement {
           value: link.url,
           focusKey: fk("url"),
           dir: "ltr",
-          maxlength: String(L.MAX_URL),
+          limit: L.MAX_URL,
           placeholder: "/config/automation",
           commit: (input) => this.actions.setLink(id, "url", input.value),
         }),
@@ -1518,7 +1529,7 @@ class EspEditor extends HTMLElement {
         help: t(lang, "aliasesHelp"),
         value: item.aliases,
         focusKey: fk("aliases"),
-        maxlength: String(L.MAX_ALIASES),
+        limit: L.MAX_ALIASES,
         commit: (input) => this.actions.setItem(ikey, "aliases", input.value),
       }),
     );

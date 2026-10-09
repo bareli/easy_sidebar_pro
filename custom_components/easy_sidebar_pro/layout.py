@@ -51,6 +51,8 @@ def _name(value: Any, where: str) -> str:
     if not 1 <= len(name) <= MAX_NAME:
         raise LayoutError(f"{where}: name must be 1-{MAX_NAME} characters")
     categories = [unicodedata.category(c) for c in name]
+    if "Cs" in categories:
+        raise LayoutError(f"{where}: name contains half of a character (lone surrogate)")
     if "Cc" in categories:
         raise LayoutError(f"{where}: name contains control characters")
     if any(cat == "Cf" and c not in _ALLOWED_FORMAT for c, cat in zip(name, categories)):
@@ -141,7 +143,7 @@ def _aliases(value: Any, where: str) -> str:
         return ""
     if not isinstance(value, str) or len(value) > MAX_ALIASES:
         raise LayoutError(f"{where}: search words must be text of at most {MAX_ALIASES} characters")
-    if any(unicodedata.category(c) == "Cc" or (unicodedata.category(c) == "Cf" and c not in _ALLOWED_FORMAT) for c in value):
+    if any(unicodedata.category(c) in ("Cc", "Cs") or (unicodedata.category(c) == "Cf" and c not in _ALLOWED_FORMAT) for c in value):
         raise LayoutError(f"{where}: search words contain control characters")
     return " ".join(value.split())
 
