@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.6.0 (unreleased)
+## v0.6.0 (2026-10-09)
 
 - **Icon colour per item** (⋮ on a panel or link row in the editor): the same theme colours and custom `#rrggbb` as a group's colours. It colours the item's icon in the sidebar and the pinned area, and wins over its group's icon colour. Like group colours, it is adjusted for contrast on the theme; the selected item keeps Home Assistant's own highlight.
 
