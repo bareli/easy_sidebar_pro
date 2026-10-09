@@ -2197,6 +2197,19 @@ a:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 1px; 
 :host([bottom]) { top: auto; bottom: 0; z-index: 4;
   height: calc(${TABS_HEIGHT}px + var(--safe-area-inset-bottom, 0px)); padding: 0 12px var(--safe-area-inset-bottom, 0px);
   border-bottom: none; border-top: 1px solid var(--divider-color); }
+/* Not HA's own bottom tabs (UX-014): a theme-coloured top edge and the group's icon at the start mark it as the
+   group's bar; tabs stay pills with icon and text side by side (HA's stack them). */
+:host([bottom]) { border-top: 2px solid var(--esp-tab-current); gap: 8px; padding-inline-start: 8px; }
+:host([bottom]) .title { display: flex; max-width: none; color: var(--esp-tab-current); }
+:host([bottom]) .title span { display: none; }
+:host([bottom]) .title .icon { --mdc-icon-size: 22px; width: 22px; height: 22px; }
+/* An edge fade where more tabs scroll in, only on the side(s) that hide some (start / end, RTL aware). */
+nav[data-fade-start], nav[data-fade-end] {
+  -webkit-mask-image: linear-gradient(to var(--esp-fade-to, right), transparent 0, #000 var(--esp-fs, 0px), #000 calc(100% - var(--esp-fe, 0px)), transparent 100%);
+  mask-image: linear-gradient(to var(--esp-fade-to, right), transparent 0, #000 var(--esp-fs, 0px), #000 calc(100% - var(--esp-fe, 0px)), transparent 100%); }
+nav[data-fade-start] { --esp-fs: 32px; }
+nav[data-fade-end] { --esp-fe: 32px; }
+:host([rtl]) nav { --esp-fade-to: left; }
 `;
 
 class EspTabs extends HTMLElement {
@@ -2206,9 +2219,20 @@ class EspTabs extends HTMLElement {
     const style = h("style");
     style.textContent = TABS_CSS;
     this._title = h("div", { class: "title", "aria-hidden": "true" });
-    this._nav = h("nav");
+    this._nav = h("nav", { onscroll: () => this._fade() });
     root.append(style, this._title, this._nav);
     this._sig = "";
+    // The edge fade follows the list's width too (rotation, the drawer opening); feature detected.
+    if (typeof ResizeObserver === "function") new ResizeObserver(() => this._fade()).observe(this._nav);
+  }
+
+  /** Mark the ends of the tab list that hide more tabs (the CSS fades them); written on change only. */
+  _fade() {
+    const nav = this._nav;
+    const { start, end } = L.fadeEdges(nav.scrollLeft, nav.scrollWidth, nav.clientWidth);
+    setFlag(nav, "data-fade-start", start);
+    setFlag(nav, "data-fade-end", end);
+    setFlag(this, "rtl", getComputedStyle(nav).direction === "rtl");
   }
 
   /** view: { name, icon, tabs: [{ path, href, newTab, title, icon }], selected }. Rebuilt only when it changes. */
@@ -2239,7 +2263,10 @@ class EspTabs extends HTMLElement {
         ),
       ),
     );
-    requestAnimationFrame(() => this._nav.querySelector('[aria-current="page"]')?.scrollIntoView({ block: "nearest", inline: "nearest" }));
+    requestAnimationFrame(() => {
+      this._nav.querySelector('[aria-current="page"]')?.scrollIntoView({ block: "nearest", inline: "nearest" });
+      this._fade();
+    });
   }
 }
 

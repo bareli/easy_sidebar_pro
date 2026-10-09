@@ -400,7 +400,18 @@ export function tabsFor(layout, visible, selected) {
 }
 
 /** Where a click on a tabbed row goes: the tab last open in this page when still shown, else the first. */
-export const tabTarget = (paths, last) => (last && paths.includes(last) ? last : paths[0] ?? null);
+/**
+ * Which ends of a sideways-scrolling tab list hide more tabs (UX-014), from its scroll position. `scrollLeft` is
+ * 0 at the start and negative toward the end in RTL, so its distance from 0 is the offset from the start.
+ */
+export function fadeEdges(scrollLeft, scrollWidth, clientWidth) {
+  const max = scrollWidth - clientWidth;
+  if (!(max > 1)) return { start: false, end: false };
+  const pos = Math.abs(scrollLeft);
+  return { start: pos > 1, end: pos < max - 1 };
+}
+
+export const tabTarget =(paths, last) => (last && paths.includes(last) ? last : paths[0] ?? null);
 
 /** Text as the search compares it: case and accents (Latin diacritics, Hebrew points) ignored. */
 export const searchText = (value) =>

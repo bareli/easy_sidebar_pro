@@ -62,7 +62,9 @@ the same layout to every user who has not made their own.
   Clicking it opens the group's first item (or the one last open in this page) with a bar of tabs above the
   page, one per item of the group. The pages are Home Assistant's own, unchanged; the group's row is
   highlighted while any of them is open. A dashboard with several views keeps its own view tabs below the
-  bar. Hidden items are not tabs. On phones (narrow screens) the tabs are a bar at the bottom of the screen.
+  bar. Hidden items are not tabs. On phones (narrow screens) the tabs are a bar at the bottom of the screen,
+  with a coloured top edge and the group's icon so it is not mistaken for a page's own tabs. When more tabs
+  scroll sideways, the bar fades at that edge.
   The bar and the page's header stay in place while you scroll a long page.
 - **Links**: **Add link** in the editor adds an item that is not a Home Assistant panel: a page of Home Assistant
   (`/config/automation`, `/lovelace/cameras`, `/config/integrations`...) or a web address (your router, NAS,

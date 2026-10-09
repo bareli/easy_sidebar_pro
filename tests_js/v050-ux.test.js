@@ -274,6 +274,31 @@ test("#54 entity fields are comboboxes with an own listbox (no datalist), keyboa
   assert.match(SRC, /this\.entityChoices = L\.entityList\(opts\.hass\?\.states\);/);
 });
 
+/* ---- #56 UX-014: our phone bar looks unlike HA's; edge fade where tabs overflow ---- */
+
+test("#56 fadeEdges: fade only the side(s) hiding tabs, LTR and RTL (negative scrollLeft)", () => {
+  assert.deepEqual(L.fadeEdges(0, 300, 300), { start: false, end: false }); // fits
+  assert.deepEqual(L.fadeEdges(0, 301, 300), { start: false, end: false }); // 1 px is not an overflow
+  assert.deepEqual(L.fadeEdges(0, 500, 300), { start: false, end: true });
+  assert.deepEqual(L.fadeEdges(100, 500, 300), { start: true, end: true });
+  assert.deepEqual(L.fadeEdges(200, 500, 300), { start: true, end: false });
+  assert.deepEqual(L.fadeEdges(-100, 500, 300), { start: true, end: true }); // RTL
+  assert.deepEqual(L.fadeEdges(-200, 500, 300), { start: true, end: false });
+  assert.deepEqual(L.fadeEdges(-0, 500, 300), { start: false, end: true });
+});
+
+test("#56 the bottom bar has its own look and the nav is masked only on overflowing sides, RTL aware", () => {
+  const css = SRC.slice(SRC.indexOf("const TABS_CSS"), SRC.indexOf("class EspTabs"));
+  assert.match(css, /:host\(\[bottom\]\) \{ border-top: 2px solid var\(--esp-tab-current\);/);
+  assert.match(css, /:host\(\[bottom\]\) \.title \{ display: flex;/);
+  assert.match(css, /nav\[data-fade-start\], nav\[data-fade-end\] \{\n\s+-webkit-mask-image: linear-gradient\(to var\(--esp-fade-to, right\)/);
+  assert.match(css, /:host\(\[rtl\]\) nav \{ --esp-fade-to: left; \}/);
+  const cls = SRC.slice(SRC.indexOf("class EspTabs"), SRC.indexOf('customElements.get("esp-group")'));
+  assert.match(cls, /h\("nav", \{ onscroll: \(\) => this\._fade\(\) \}\)/);
+  assert.match(cls, /if \(typeof ResizeObserver === "function"\) new ResizeObserver\(\(\) => this\._fade\(\)\)\.observe\(this\._nav\);/);
+  assert.match(cls, /setFlag\(nav, "data-fade-start", start\);\n\s+setFlag\(nav, "data-fade-end", end\);/);
+});
+
 /* ---- #62 UX-020: the hint says where the search box is ---- */
 
 test("#62 the editor hint ends with where to turn on the search box", () => {
