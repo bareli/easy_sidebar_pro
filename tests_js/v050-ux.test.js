@@ -216,6 +216,64 @@ test("#53 the marker and dimming are applied when rows are built and patched in 
   assert.doesNotMatch(setItem, /e\.set\(|\.render\(\)/);
 });
 
+/* ---- #54 UX-012: entity suggestions by friendly name or id ---- */
+
+const STATES = {
+  "counter.open_windows": { state: "2", attributes: { friendly_name: "חלונות פתוחים" } },
+  "input_boolean.alarm": { state: "off", attributes: { friendly_name: "Alarm אזעקה" } },
+  "binary_sensor.front_door": { state: "on", attributes: { friendly_name: "Front Door" } },
+  "sensor.cafe": { state: "1", attributes: { friendly_name: "Café temperature" } },
+  "sun.sun": { state: "above_horizon", attributes: {} },
+};
+
+test("#54 entityList keeps id and friendly name; matchEntities finds by name in any language or by id", () => {
+  const list = L.entityList(STATES);
+  assert.equal(list.length, 5);
+  assert.deepEqual(list.find((e) => e.id === "sun.sun").name, "");
+  const ids = (q) => L.matchEntities(list, q).map((e) => e.id);
+  assert.deepEqual(ids("חלונות"), ["counter.open_windows"]);
+  assert.deepEqual(ids("אזעקה"), ["input_boolean.alarm"]);
+  assert.deepEqual(ids("alarm"), ["input_boolean.alarm"]);
+  assert.deepEqual(ids("FRONT door"), ["binary_sensor.front_door"]);
+  assert.deepEqual(ids("cafe"), ["sensor.cafe"]); // accents ignored
+  assert.deepEqual(ids("CAFÉ"), ["sensor.cafe"]);
+  assert.deepEqual(ids("binary_sensor.fr"), ["binary_sensor.front_door"]);
+  assert.deepEqual(ids("sun"), ["sun.sun"]);
+  assert.deepEqual(ids(""), []);
+  assert.deepEqual(ids("   "), []);
+  assert.deepEqual(ids("nothing-like-this"), []);
+});
+
+test("#54 suggestions are limited to 8, name / id starts first", () => {
+  const many = Object.fromEntries(Array.from({ length: 30 }, (_, i) => [`light.lamp_${i}`, { state: "on", attributes: { friendly_name: `Lamp ${i}` } }]));
+  many["sensor.x"] = { state: "1", attributes: { friendly_name: "Desk lamp" } };
+  const got = L.matchEntities(L.entityList(many), "lamp");
+  assert.equal(got.length, 8);
+  assert.equal(L.MAX_ENTITY_SUGGESTIONS, 8);
+  // "Desk lamp" matches by a word start: counted among the first group, not dropped.
+  const word = L.matchEntities(L.entityList({ "sensor.x": many["sensor.x"], "sensor.y": { state: "1", attributes: { friendly_name: "Clampdown" } } }), "lamp");
+  assert.deepEqual(word.map((e) => e.id), ["sensor.x", "sensor.y"]);
+});
+
+test("#54 entity fields are comboboxes with an own listbox (no datalist), keyboard and aria-activedescendant", () => {
+  assert.doesNotMatch(SRC, /h\("datalist"|list: "esp-entities"/);
+  const fn = SRC.slice(SRC.indexOf("function optField("), SRC.indexOf("class EspEditor"));
+  assert.match(fn, /role: suggest \? "combobox" : null,/);
+  assert.match(fn, /"aria-autocomplete": suggest \? "list" : null,/);
+  assert.match(fn, /"aria-controls": listId,/);
+  assert.match(fn, /role: "listbox"/);
+  assert.match(fn, /role: "option"/);
+  assert.match(fn, /setAttr\(input, "aria-activedescendant", opt \? opt\.id : null\);/);
+  assert.match(fn, /e\.key === "ArrowDown" \|\| e\.key === "ArrowUp"/);
+  assert.match(fn, /e\.key === "Escape" && !listbox\.hidden/);
+  assert.match(fn, /if \(suggest && !listbox\.hidden && active >= 0\) return pick\(input, active\);/);
+  // the picked option stores the id
+  assert.match(fn, /input\.value = options\[i\]\.id;/);
+  assert.match(fn, /h\("bdi", \{\}, o\.name\), " ", h\("span", \{ class: "id", dir: "ltr" \}, `\(\$\{o\.id\}\)`\)/);
+  assert.match(SRC, /suggest: \(text\) => L\.matchEntities\(this\.entityChoices, text\),/);
+  assert.match(SRC, /this\.entityChoices = L\.entityList\(opts\.hass\?\.states\);/);
+});
+
 /* ---- #62 UX-020: the hint says where the search box is ---- */
 
 test("#62 the editor hint ends with where to turn on the search box", () => {

@@ -410,6 +410,37 @@ export const searchText = (value) =>
     .toLocaleLowerCase();
 
 export const MAX_VIEW_RESULTS = 8;
+export const MAX_ENTITY_SUGGESTIONS = 8;
+
+/**
+ * Home Assistant's entities for the editor's suggestions (UX-012): id and friendly name, each also in the form the
+ * search compares (case and accents ignored), sorted by what is shown.
+ */
+export function entityList(states) {
+  return Object.entries(states ?? {})
+    .map(([id, s]) => {
+      const name = typeof s?.attributes?.friendly_name === "string" ? s.attributes.friendly_name.trim() : "";
+      return { id, name, key: searchText(name), idKey: searchText(id) };
+    })
+    .sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id) || a.id.localeCompare(b.id));
+}
+
+/**
+ * Suggestions for what was typed: entities whose friendly name (any language) or id contains it; those whose name,
+ * a word of the name, the id or the id's object part starts with it come first. At most `max`.
+ */
+export function matchEntities(list, query, max = MAX_ENTITY_SUGGESTIONS) {
+  const q = searchText(query).trim();
+  if (!q) return [];
+  const first = [];
+  const rest = [];
+  for (const e of list) {
+    if (e.key.startsWith(q) || ` ${e.key}`.includes(` ${q}`) || e.idKey.startsWith(q) || e.idKey.includes(`.${q}`)) first.push(e);
+    else if (rest.length < max && (e.key.includes(q) || e.idKey.includes(q))) rest.push(e);
+    if (first.length >= max) break;
+  }
+  return [...first, ...rest].slice(0, max);
+}
 
 /**
  * Rows for the sidebar search: entries whose words contain `query`. `titles`: path -> the shown name or a

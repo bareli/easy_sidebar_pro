@@ -10,6 +10,7 @@
 - Link addresses typed without a scheme: home network addresses (IP, `nas.local`, `router.lan`, any address with a port) get `http://`, other web names `https://`; a single word is a Home Assistant page.
 - Clearer Hebrew wording in the editor (badge field, address error, Undo, "אפשרויות נוספות", one consistent register); the address error now says http or https.
 - Hebrew editor: the add buttons read "קבוצה" and "קישור" on one line; the full text is their tooltip and accessible name.
+- Entity fields suggest entities by friendly name (any language, accents ignored) or id, shown as "Name (entity_id)"; arrow keys, Enter and Escape work.
 - Editor: rows with a badge or show-only-when rule carry a small mark; a row its rule hides right now is dimmed and says why.
 - Badge and show-only-when fields warn when the entity does not exist in Home Assistant (saving stays allowed).
 - Icon-only sidebar: groups show Home Assistant's own tooltip with their full name, like the other items.

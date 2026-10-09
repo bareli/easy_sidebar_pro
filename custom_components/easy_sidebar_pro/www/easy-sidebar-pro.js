@@ -754,6 +754,16 @@ button { font: inherit; color: inherit; }
 .warning { font-size: var(--ha-font-size-s, 12px); color: var(--warning-color, #ffa600);
   color: color-mix(in srgb, var(--warning-color, #ffa600) 40%, var(--primary-text-color, #212121)); }
 .warning:empty { display: none; }
+/* Entity suggestions under a field (UX-012): "Friendly name (entity_id)", at most 8. */
+.suggest { display: flex; flex-direction: column; margin-top: -4px; border: 1px solid var(--divider-color); border-radius: 6px;
+  background: var(--card-background-color, var(--primary-background-color)); max-height: 296px; overflow-y: auto; }
+.suggest[hidden] { display: none; }
+.option { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 4px; min-height: 36px; box-sizing: border-box; padding: 8px 10px;
+  cursor: pointer; text-align: start; overflow-wrap: anywhere; }
+.option + .option { border-top: 1px solid var(--divider-color); }
+.option:hover, .option[aria-selected="true"] { background: rgba(var(--rgb-primary-color, 3,169,244), 0.14); }
+.option[aria-selected="true"] { outline: 2px solid var(--primary-color); outline-offset: -2px; }
+.option .id { color: var(--secondary-text-color); font-size: var(--ha-font-size-s, 12px); unicode-bidi: isolate; }
 /* A row with a badge or show-only-when rule (UX-011); dimmed like a hidden item while its rule hides it now. */
 .rule { flex: none; width: 18px; height: 18px; display: grid; place-items: center; color: var(--secondary-text-color); }
 .rule svg { width: 16px; height: 16px; fill: currentColor; }
@@ -796,7 +806,7 @@ function limitInput(input, max) {
  * `errors` (focus key -> { row, value, message }) keeps a refused value and its message across re-renders, so Done can
  * refuse while a field is in error (BUG-021); `row` is the layout key of the row the options belong to.
  */
-function optField({ label, help = null, value, focusKey, dir = null, list = null, limit = null, placeholder = null, errors = null, row = null, warn = null, commit }) {
+function optField({ label, help = null, value, focusKey, dir = null, limit = null, placeholder = null, errors = null, row = null, warn = null, suggest = null, commit }) {
   const errId = `err-${focusKey.replace(/[^A-Za-z0-9_-]/g, "_")}`;
   const helpId = help ? `help-${errId}` : null;
   // A non-blocking warning for a value that is valid but suspicious (UX-010): announced, not aria-invalid.
@@ -813,36 +823,107 @@ function optField({ label, help = null, value, focusKey, dir = null, list = null
     if (message) errors?.set(focusKey, { row, value: input.value, message });
     else errors?.delete(focusKey);
   };
+  // Suggestions (UX-012): an own listbox under a combobox field, since a datalist cannot match labels reliably.
+  // `suggest(text)` returns [{ id, name }]; picking one stores the id. Down / Up move, Enter picks, Escape closes.
+  const listId = suggest ? `list-${errId}` : null;
+  const listbox = suggest ? h("div", { class: "suggest", id: listId, role: "listbox", "aria-label": label, hidden: true }) : null;
+  let options = [];
+  let active = -1;
+  const mark = (input) => {
+    listbox.querySelectorAll('[role="option"]').forEach((o, i) => o.setAttribute("aria-selected", String(i === active)));
+    const opt = active >= 0 ? listbox.children[active] : null;
+    setAttr(input, "aria-activedescendant", opt ? opt.id : null);
+    opt?.scrollIntoView?.({ block: "nearest" });
+  };
+  const close = (input) => {
+    if (!listbox) return;
+    options = [];
+    active = -1;
+    listbox.replaceChildren();
+    listbox.hidden = true;
+    input.setAttribute("aria-expanded", "false");
+    setAttr(input, "aria-activedescendant", null);
+  };
+  const pick = (input, i) => {
+    input.value = options[i].id;
+    close(input);
+    run(input);
+  };
+  const show = (input) => {
+    options = suggest(input.value);
+    active = -1;
+    listbox.replaceChildren(
+      ...options.map((o, i) =>
+        h(
+          "div",
+          {
+            class: "option",
+            role: "option",
+            id: `${listId}-${i}`,
+            "aria-selected": "false",
+            // pointerdown, not click: the field keeps its focus (no blur commit before the pick).
+            onpointerdown: (e) => {
+              e.preventDefault();
+              pick(input, i);
+            },
+          },
+          o.name ? [h("bdi", {}, o.name), " ", h("span", { class: "id", dir: "ltr" }, `(${o.id})`)] : h("span", { dir: "ltr" }, o.id),
+        ),
+      ),
+    );
+    listbox.hidden = !options.length;
+    input.setAttribute("aria-expanded", String(options.length > 0));
+    mark(input);
+  };
+  const field = h("input", {
+    type: "text",
+    dir,
+    placeholder,
+    spellcheck: "false",
+    autocomplete: "off",
+    role: suggest ? "combobox" : null,
+    "aria-autocomplete": suggest ? "list" : null,
+    "aria-expanded": suggest ? "false" : null,
+    "aria-controls": listId,
+    "aria-describedby": [errId, warnId, helpId].filter(Boolean).join(" "),
+    "aria-invalid": pending ? "true" : null,
+    "data-focus-key": focusKey,
+    ".value": pending ? pending.value : value ?? "",
+    oninput: (e) => {
+      if (limit) limitInput(e.target, limit);
+      e.target.removeAttribute("aria-invalid");
+      error.textContent = "";
+      if (warning) warning.textContent = "";
+      if (suggest) show(e.target);
+    },
+    onchange: (e) => run(e.target),
+    onblur: (e) => close(e.target),
+    onkeydown: (e) => {
+      const input = e.target;
+      if (suggest && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+        e.preventDefault();
+        if (listbox.hidden) show(input);
+        if (!options.length) return;
+        active = (active + (e.key === "ArrowDown" ? 1 : -1) + options.length) % options.length;
+        mark(input);
+        return;
+      }
+      if (suggest && e.key === "Escape" && !listbox.hidden) {
+        e.preventDefault();
+        e.stopPropagation();
+        close(input);
+        return;
+      }
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      if (suggest && !listbox.hidden && active >= 0) return pick(input, active);
+      close(input);
+      run(input);
+    },
+  });
   return [
-    h(
-      "label",
-      { class: "field" },
-      h("span", {}, label),
-      h("input", {
-        type: "text",
-        dir,
-        list,
-        placeholder,
-        spellcheck: "false",
-        autocomplete: "off",
-        "aria-describedby": [errId, warnId, helpId].filter(Boolean).join(" "),
-        "aria-invalid": pending ? "true" : null,
-        "data-focus-key": focusKey,
-        ".value": pending ? pending.value : value ?? "",
-        oninput: (e) => {
-          if (limit) limitInput(e.target, limit);
-          e.target.removeAttribute("aria-invalid");
-          error.textContent = "";
-          if (warning) warning.textContent = "";
-        },
-        onchange: (e) => run(e.target),
-        onkeydown: (e) => {
-          if (e.key !== "Enter") return;
-          e.preventDefault();
-          run(e.target);
-        },
-      }),
-    ),
+    h("label", { class: "field" }, h("span", {}, label), field),
+    listbox,
     help ? h("div", { class: "note", id: helpId }, help) : null,
     error,
     warning,
@@ -895,9 +976,9 @@ class EspEditor extends HTMLElement {
     this.nameErrors = new Map();
     // ⋮ option fields left in error (focus key -> { row, value, message }); Done refuses while any is.
     this.optErrors = new Map();
-    // The row whose ⋮ options are open (one at a time), and the entity ids its fields suggest.
+    // The row whose ⋮ options are open (one at a time), and the entities its fields suggest (id + friendly name).
     this.optionsOpen = null;
-    this._entities = h("datalist", { id: "esp-entities" }, (opts.entities ?? []).map((e) => h("option", { value: e })));
+    this.entityChoices = L.entityList(opts.hass?.states);
     this.render();
     requestAnimationFrame(() => this.shadowRoot.querySelector(".bar .btn")?.focus());
   }
@@ -1174,7 +1255,7 @@ class EspEditor extends HTMLElement {
         ),
       );
 
-    this._content.replaceChildren(bar, settings, add, list, footer.childElementCount ? footer : "", this._entities);
+    this._content.replaceChildren(bar, settings, add, list, footer.childElementCount ? footer : "");
 
     if (focusKey) {
       const el = root.querySelector(`[data-focus-key="${CSS.escape(focusKey)}"]`);
@@ -1705,8 +1786,9 @@ class EspEditor extends HTMLElement {
         focusKey: fk(field),
         errors,
         row: key,
-        dir: "ltr",
-        list: "esp-entities",
+        // auto: ids are Latin, a friendly name typed to find one may be Hebrew.
+        dir: "auto",
+        suggest: (text) => L.matchEntities(this.entityChoices, text),
         placeholder: field === "badge" ? "sensor.open_windows" : "binary_sensor.alarm",
         // Saving stays allowed: the entity may come back (an integration that is off).
         warn: (v) => (L.unknownEntity(v, this.hass?.states) ? t(lang, "entityMissing") : ""),
@@ -3069,7 +3151,6 @@ class Controller {
       tree,
       settings,
       meta,
-      entities: Object.keys(this.hass.states ?? {}).sort(),
       look: (color, iconColor) => this.look(color, iconColor),
       hexOf: (color) => this.hexOf(color),
       hiddenSet: hidden,
