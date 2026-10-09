@@ -6,6 +6,10 @@ const L = await import(`./layout.js${new URL(import.meta.url).search}`);
 
 const DOMAIN = "easy_sidebar_pro";
 const ctrls = new WeakMap();
+// Controllers holding subscriptions and window listeners. ha-sidebar's connected / disconnected callbacks
+// cannot be patched (a custom element's lifecycle callbacks are read once, at define()), so a controller
+// whose sidebar left the page is let go when another sidebar appears or on its next location event (PERF-006).
+const live = new Set();
 // Whether HA's sidebar has the fixed-panel renderer the bottom grid draws into (feature detection).
 let gridSupported = false;
 
@@ -2125,12 +2129,14 @@ class Controller {
   }
 
   connect() {
+    live.add(this);
     this.connectNative();
     // An internal link is selected by the page's path, which can change inside one panel (dashboard views).
     if (!this.onLocation) {
       // HA re-renders for the route itself (and fires location-changed twice per click): refresh only when the
       // selected internal link differs from the one the last render used (PERF-005).
       this.onLocation = () => {
+        if (!this.sb.isConnected) return this.disconnect();
         const links = this.data?.layout?.links;
         if (!links || !Object.keys(links).length) return;
         if (L.linkAt(links, location.pathname) !== this.renderedLink) this.refresh();
@@ -2144,8 +2150,10 @@ class Controller {
       .subscribeMessage((msg) => this.onData(msg), { type: `${DOMAIN}/subscribe` })
       .then(
         (unsub) => {
-          this.unsub = unsub;
           this.subscribing = false;
+          // Disconnected while subscribing: do not keep the subscription.
+          if (!live.has(this)) return unsub();
+          this.unsub = unsub;
         },
         () => {
           this.subscribing = false;
@@ -2163,8 +2171,9 @@ class Controller {
       .subscribeMessage((msg) => this.onNative(msg?.value), { type: "frontend/subscribe_user_data", key: "sidebar" })
       .then(
         (unsub) => {
-          this.nativeUnsub = unsub;
           this.nativeSubscribing = false;
+          if (!live.has(this)) return unsub();
+          this.nativeUnsub = unsub;
         },
         () => {
           this.nativeSubscribing = false;
@@ -2174,6 +2183,7 @@ class Controller {
 
   disconnect() {
     this.clearTabs();
+    live.delete(this);
     if (this.onLocation) {
       window.removeEventListener("location-changed", this.onLocation);
       window.removeEventListener("popstate", this.onLocation);
@@ -3212,10 +3222,12 @@ class Controller {
 function controllerFor(sb) {
   let c = ctrls.get(sb);
   if (!c) {
+    // A new sidebar: release the controllers of sidebars that left the page (PERF-006).
+    for (const old of [...live]) if (!old.sb.isConnected) old.disconnect();
     c = new Controller(sb);
     ctrls.set(sb, c);
   }
-  c.connect();
+  if (sb.isConnected) c.connect();
   return c;
 }
 
@@ -3273,6 +3285,10 @@ function patch(cls) {
     origUpdated?.call(this, changed);
     if (this.hass) controllerFor(this).afterUpdate();
   };
+  // These two wrappers do NOT run in the browser: a custom element's lifecycle callbacks are read once, at
+  // define(), and ha-sidebar is defined before this patch (PERF-006). They stay only for callers that invoke
+  // them directly (the node tests). Real cleanup: controllerFor releases controllers of detached sidebars,
+  // and a controller's location listener disconnects it once its sidebar is detached.
   p.connectedCallback = function () {
     origConnected?.call(this);
     if (this.hass) controllerFor(this);
