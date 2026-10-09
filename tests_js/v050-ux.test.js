@@ -102,6 +102,28 @@ test("#58 the add buttons draw the short label and carry the full one as title a
   assert.match(SRC, /const long = short === full \? null : full;\n\s+return h\("button", \{ class: "add", type: "button", "data-focus-key": focusKey, "aria-label": long, title: long, onclick: run \}, svg\(icon\), short\);/);
 });
 
+/* ---- #57 UX-015: narrow editor, hint behind "?", 44 px row buttons ---- */
+
+const EDITOR_CSS = SRC.slice(SRC.indexOf("const EDITOR_CSS"), SRC.indexOf("function limitInput"));
+
+test("#57 a labelled '?' toggle (aria-expanded, aria-controls) folds the hint on narrow screens, in place", () => {
+  assert.match(EN, /\n {4}hintToggle: "[^"]+",/);
+  assert.match(HE, /\n {4}hintToggle: "[^"]+",/);
+  assert.match(SRC, /class: "icon-btn help",[\s\S]{0,80}"aria-expanded": String\(this\.hasAttribute\("hint-open"\)\),\n\s+"aria-controls": "esp-hint",\n\s+"aria-label": t\(lang, "hintToggle"\),/);
+  assert.match(SRC, /this\.toggleAttribute\("hint-open", open\);\n\s+e\.currentTarget\.setAttribute\("aria-expanded", String\(open\)\);/);
+  assert.match(SRC, /h\("div", \{ class: "note hint", id: "esp-hint" \}, t\(lang, "hint"\)\)/);
+  assert.match(EDITOR_CSS, /:host\(\[narrow\]:not\(\[hint-open\]\)\) \.hint \{ display: none; \}/);
+  assert.match(EDITOR_CSS, /@media \(max-width: 600px\) \{[\s\S]*:host\(:not\(\[hint-open\]\)\) \.hint \{ display: none; \}/);
+  // The "?" exists only on narrow screens.
+  assert.match(EDITOR_CSS, /\n\.help \{ display: none;/);
+});
+
+test("#57 handle, eye and ⋮ are 44 px on narrow screens; the controller marks the editor narrow", () => {
+  assert.match(EDITOR_CSS, /:host\(\[narrow\]\) \.handle, :host\(\[narrow\]\) \.icon-btn\.eye, :host\(\[narrow\]\) \.icon-btn\.more \{ width: 44px; height: 44px; \}/);
+  assert.match(EDITOR_CSS, /@media \(max-width: 600px\) \{[\s\S]*\.handle, \.icon-btn\.eye, \.icon-btn\.more \{ width: 44px; height: 44px; \}/);
+  assert.match(SRC, /setFlag\(this\.editor, "narrow", this\.sb\.hasAttribute\("narrow"\)\);\n\s+return \[this\.editor\];/);
+});
+
 /* ---- #62 UX-020: the hint says where the search box is ---- */
 
 test("#62 the editor hint ends with where to turn on the search box", () => {

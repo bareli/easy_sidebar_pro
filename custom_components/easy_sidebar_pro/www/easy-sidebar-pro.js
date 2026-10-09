@@ -176,6 +176,7 @@ const STRINGS = {
     grouped: "Group created with {a} and {b}",
     nameRequired: "Enter a group name",
     linkNameRequired: "Enter a link name",
+    hintToggle: "Help: how to edit the sidebar",
     hint: "Drag a row onto another row to make a group. The eye button hides or shows an item; the ⋮ button has more options. The search box is under Display options.",
     addLink: "Add link",
     addLinkShort: "Add link",
@@ -308,6 +309,7 @@ const STRINGS = {
     grouped: "נוצרה קבוצה עם {a} ועם {b}",
     nameRequired: "הזינו שם לקבוצה",
     linkNameRequired: "הזינו שם לקישור",
+    hintToggle: "עזרה: איך עורכים את סרגל הצד",
     hint: "גררו שורה אל שורה אחרת כדי ליצור קבוצה. כפתור העין מסתיר או מציג פריט; בכפתור ⋮ יש אפשרויות נוספות. תיבת חיפוש נמצאת באפשרויות תצוגה.",
     addLink: "הוספת קישור",
     addLinkShort: "קישור",
@@ -740,6 +742,21 @@ button { font: inherit; color: inherit; }
 .btn.remove { align-self: flex-start; display: inline-flex; gap: 6px; align-items: center; color: var(--esp-error-color); border-color: var(--esp-error-color); }
 .btn.remove svg { width: 18px; height: 18px; fill: currentColor; }
 .row.link .title { font-style: italic; }
+/* Narrow screens (HA's drawer sidebar, or a phone width): the hint folds behind "?", and the row buttons are 44 px
+   tap targets (UX-015). The "?" button exists only there. */
+.help { display: none; margin-inline-start: auto; font-weight: var(--ha-font-weight-medium, 500); font-size: 18px; color: var(--esp-action-color);
+  border: 1px solid var(--divider-color); }
+.help[aria-expanded="true"] { background: rgba(var(--rgb-primary-color, 3,169,244), 0.18); }
+:host([narrow]) .help { display: grid; width: 44px; height: 44px; }
+:host([narrow]:not([hint-open])) .hint { display: none; }
+:host([narrow]) .handle, :host([narrow]) .icon-btn.eye, :host([narrow]) .icon-btn.more { width: 44px; height: 44px; }
+:host([narrow]) .row { min-height: 44px; }
+@media (max-width: 600px) {
+  .help { display: grid; width: 44px; height: 44px; }
+  :host(:not([hint-open])) .hint { display: none; }
+  .handle, .icon-btn.eye, .icon-btn.more { width: 44px; height: 44px; }
+  .row { min-height: 44px; }
+}
 `;
 
 /**
@@ -1004,9 +1021,28 @@ class EspEditor extends HTMLElement {
         { class: "bar-buttons" },
         h("button", { class: "btn primary", type: "button", "data-focus-key": "done", onclick: () => this.actions.done() }, t(lang, "done")),
         h("button", { class: "btn", type: "button", "data-focus-key": "cancel", onclick: () => this.actions.cancel() }, t(lang, "cancel")),
+        // Narrow screens: the hint is folded behind "?" (UX-015). Toggled in place, no re-render.
+        h(
+          "button",
+          {
+            class: "icon-btn help",
+            type: "button",
+            "aria-expanded": String(this.hasAttribute("hint-open")),
+            "aria-controls": "esp-hint",
+            "aria-label": t(lang, "hintToggle"),
+            title: t(lang, "hintToggle"),
+            "data-focus-key": "help",
+            onclick: (e) => {
+              const open = !this.hasAttribute("hint-open");
+              this.toggleAttribute("hint-open", open);
+              e.currentTarget.setAttribute("aria-expanded", String(open));
+            },
+          },
+          "?",
+        ),
       ),
       !this.own && this.hasDefault ? h("div", { class: "note" }, t(lang, "onDefault")) : null,
-      h("div", { class: "note" }, t(lang, "hint")),
+      h("div", { class: "note hint", id: "esp-hint" }, t(lang, "hint")),
       this.notice ? h("div", { class: "notice", role: "alert" }, this.notice) : null,
       this.status ? h("div", { class: "notice", role: "status" }, this.status) : null,
       this.error ? h("div", { class: "error", role: "alert" }, this.error) : null,
@@ -2305,7 +2341,11 @@ class Controller {
     const at = (this.renderedLink = L.linkAt(layout?.links, location.pathname));
     selected = at && visible.includes(at) ? at : selected;
     this.selected = selected;
-    if (this.editing) return [this.editor];
+    if (this.editing) {
+      // HA's drawer sidebar (phones): the editor folds its hint and takes 44 px row buttons.
+      setFlag(this.editor, "narrow", this.sb.hasAttribute("narrow"));
+      return [this.editor];
+    }
     this.settings = L.cleanSettings(layout?.settings);
     if (this.sessionInitial && this.session !== null) {
       this.session = L.initialCollapsed(layout, visible, this.settings.accordion);

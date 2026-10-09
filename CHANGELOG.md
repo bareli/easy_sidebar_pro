@@ -10,6 +10,7 @@
 - Link addresses typed without a scheme: home network addresses (IP, `nas.local`, `router.lan`, any address with a port) get `http://`, other web names `https://`; a single word is a Home Assistant page.
 - Clearer Hebrew wording in the editor (badge field, address error, Undo, "אפשרויות נוספות", one consistent register); the address error now says http or https.
 - Hebrew editor: the add buttons read "קבוצה" and "קישור" on one line; the full text is their tooltip and accessible name.
+- Editor on phones: the hint folds behind a **?** button, and the drag handle, eye and ⋮ buttons are 44 px tap targets.
 - The editor hint says where to turn on the search box (Display options; search stays off by default).
 - Badges have a darker fill than Home Assistant's own, so the white number (5.4:1) and the dot are readable on light and dark sidebars.
 
