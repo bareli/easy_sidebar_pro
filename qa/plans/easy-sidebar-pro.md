@@ -112,3 +112,28 @@ Each confirmed defect has a stable case. Automated coverage in brackets.
 - A11Y-08 List semantics: HA's list owns only listitems while editing; grouped panels describe their group (BUG-008 #26).
 - I18N-03 Hebrew wording "עריכת סרגל הצד" (UX-005 #16).
 - PERF-04 Editor in-place updates: hide toggle / rename create ≤ 5 nodes (PERF-002 #22).
+
+## v0.5 cases (2026-10-09 cycle): group names (owner focus), links, item options, search, tab bar
+
+Group name edge cases (editor rename via typing, paste, Enter, blur, Done-while-typing; and the server via WS):
+- EDIT-18 Length boundary: 50 characters accepted, 51 refused or cut; a 200-character paste; Python counts code points, JS counts UTF-16 units: 50 emoji / 50 astral characters, an emoji cut in half at the limit (lone surrogate) must never reach storage.
+- EDIT-19 Empty, spaces only, tabs only, NBSP / ideographic space / zero-width only: refused with the inline message, Done refuses, nothing saved.
+- EDIT-20 Leading / trailing / inner spaces: trimmed consistently by editor and server; display unchanged after reload.
+- EDIT-21 HTML / script / CSS-like text (`<img src=x onerror=alert(1)>`, `</style>`, `{{ }}`, `"'\``, backslashes): stored literally, rendered as text in header, editor, tab strip title, tooltips, aria labels, search, and another user's sidebar via the admin default.
+- EDIT-22 Mixed scripts: Hebrew + English + digits, emoji ZWJ sequences, combining marks, Arabic/Persian ZWNJ, bidi controls (U+202E, U+2066..2069): accepted or refused identically on both sides; display direction sane in RTL and LTR.
+- EDIT-23 Newlines, tabs, C0/C1 control characters pasted into the name: cleaned or refused identically by editor and server.
+- EDIT-24 Duplicate names (two groups named the same, rename to an existing name, "New group" twice): defined behaviour, nothing breaks (search, announcements, tab strip).
+- EDIT-25 Rename commit paths: Enter, blur, click Done straight after typing, Cancel after typing, re-opening the editor shows the stored name.
+- EDIT-26 Long names in the sidebar: ellipsis, icon-only tooltip, folded count still visible, tab strip title, phone drawer.
+
+Links, item options:
+- EDIT-27 Add link: options open on the address; Done refuses a link without a valid address; name / icon / address / new tab edits; delete.
+- EDIT-28 Address input: internal paths, `example.com`, IPs with ports, this HA's full URL, `javascript:`, `data:`, `//host`, `/\host`, spaces, very long, unicode.
+- EDIT-29 Move to (top level, each group, pinned area, pinned area full) for panels and links; announcement.
+- EDIT-30 Badge / show-only-when / search words fields: entity validation messages, empty clears, values survive Cancel / Done correctly.
+- RND-10 Link rows: correct href / target, internal link selected on its page (longest match), external opens a new tab; links in groups, pins and tabs.
+- RND-11 Badges: number, dot, 99+, cleared; rolled up on folded and tabbed groups; rail and pinned cells; live update on state change.
+- RND-12 Show only when: item and whole group hidden / shown live.
+- RND-13 Search: English names in Hebrew UI, paths, link names / addresses, search words, dashboard views (multi-view only, subviews excluded), Enter opens the first result.
+- MOBILE-03 Tab bar at the bottom on narrow screens; above the page on wide screens; long pages keep header and bar in place; drawer open over the bar.
+- WS-05 `links` and `items` validation (ids, unknown keys, placement exactly once, URLs, entity ids, aliases).
