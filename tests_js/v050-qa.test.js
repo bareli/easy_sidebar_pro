@@ -146,6 +146,16 @@ test("#41 ⋮ option inputs use a 3:1 border colour (secondary text), not the di
     for (const bg of bgs) assert.ok(L.contrast(fg, bg) >= 3, `${fg} on ${bg}`);
 });
 
+/* ---- #42 BUG-018: the group More button's name starts with its visible label ---- */
+
+test("#42 group More / עוד: accessible name starts with the visible label, long text as tooltip, also after a rename", () => {
+  const block = SRC.slice(SRC.indexOf("  groupBlock(node) {"), SRC.indexOf("  iconEditor(node) {"));
+  assert.match(block, /class: "opt more",[\s\S]{0,120}"aria-label": `\$\{t\(lang, "optMore"\)\}, \$\{node\.name\}`,\n\s+title: t\(lang, "options", \{ name: node\.name \}\),/);
+  const patch = SRC.slice(SRC.indexOf("  patchGroup(id) {"), SRC.indexOf("  patchRow(path) {"));
+  assert.match(patch, /const more = label\(`\[data-focus-key="more:\$\{L\.groupKey\(id\)\}"\]`, `\$\{t\(lang, "optMore"\)\}, \$\{node\.name\}`\);\n\s+if \(more\) more\.title = t\(lang, "options", \{ name: node\.name \}\);/);
+  assert.ok(!/more:\$\{L\.groupKey\(id\)\}"\]`, t\(lang, "options"/.test(patch));
+});
+
 /* ---- #48 SEC-003: scheme matched in ASCII only (parity with layout.py) ---- */
 
 test("#48 httpſ:// and HTTPſ:// are refused, ASCII case variants accepted", () => {

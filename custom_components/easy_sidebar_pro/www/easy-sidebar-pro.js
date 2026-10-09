@@ -886,7 +886,8 @@ class EspEditor extends HTMLElement {
     const headIcon = iconBtn?.querySelector(".icon");
     if (headIcon) headIcon.icon = node.icon || DEFAULT_ICON;
     label(`[data-focus-key="ungroup:${id}"]`, t(lang, "ungroup", { name: node.name }));
-    label(`[data-focus-key="more:${L.groupKey(id)}"]`, t(lang, "options", { name: node.name }));
+    const more = label(`[data-focus-key="more:${L.groupKey(id)}"]`, `${t(lang, "optMore")}, ${node.name}`);
+    if (more) more.title = t(lang, "options", { name: node.name });
     for (const [key, short, long, on] of [
       ["open", "optOpen", "startOpen", node.start_open === true],
       ["tabbed", "optTabs", "tabbed", node.tabbed === true],
@@ -1132,7 +1133,8 @@ class EspEditor extends HTMLElement {
           class: "opt more",
           type: "button",
           "aria-expanded": String(this.optionsOpen === key),
-          "aria-label": t(lang, "options", { name: node.name }),
+          "aria-label": `${t(lang, "optMore")}, ${node.name}`,
+          title: t(lang, "options", { name: node.name }),
           "data-focus-key": `more:${key}`,
           onclick: () => this.toggleOptions(key),
         },
