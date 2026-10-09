@@ -135,6 +135,17 @@ test("#45 every ⋮ text field records its error and shows it again after a re-r
   assert.match(SRC, /this\.optErrors = new Map\(\);/);
 });
 
+/* ---- #41 BUG-017: option fields have a visible border ---- */
+
+test("#41 ⋮ option inputs use a 3:1 border colour (secondary text), not the divider", () => {
+  const rule = SRC.match(/\.row-opts \.field input\[type="text"\], \.row-opts \.field input:not\(\[type\]\) \{[^}]*\}/)?.[0] ?? "";
+  assert.match(rule, /border: 1px solid var\(--secondary-text-color\);/);
+  assert.ok(!rule.includes("--divider-color"));
+  // HA defaults: #727272 on the light options panel #e5e5e5 and the white field; #9b9b9b on #282828 / #1c1c1c
+  for (const [fg, bgs] of [[[114, 114, 114], [[229, 229, 229], [255, 255, 255]]], [[155, 155, 155], [[40, 40, 40], [28, 28, 28]]]])
+    for (const bg of bgs) assert.ok(L.contrast(fg, bg) >= 3, `${fg} on ${bg}`);
+});
+
 /* ---- #48 SEC-003: scheme matched in ASCII only (parity with layout.py) ---- */
 
 test("#48 httpſ:// and HTTPſ:// are refused, ASCII case variants accepted", () => {

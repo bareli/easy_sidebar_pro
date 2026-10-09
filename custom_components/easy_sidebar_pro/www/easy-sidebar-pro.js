@@ -699,7 +699,7 @@ button { font: inherit; color: inherit; }
   background: var(--secondary-background-color, rgba(127,127,127,0.06)); }
 .children .row-opts { margin-inline-start: 20px; }
 .row-opts .field input[type="text"], .row-opts .field input:not([type]) { font: inherit; color: inherit; background: var(--card-background-color, transparent);
-  border: 1px solid var(--divider-color); border-radius: 6px; padding: 6px; min-width: 0; }
+  border: 1px solid var(--secondary-text-color); border-radius: 6px; padding: 6px; min-width: 0; }
 .row-opts .field input[aria-invalid="true"] { border-color: var(--esp-error-color); }
 .row-opts .field input:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 1px; }
 .row-opts .note { margin-top: -4px; }
