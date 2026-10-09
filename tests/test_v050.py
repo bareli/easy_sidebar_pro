@@ -31,7 +31,7 @@ def test_full_layout_with_links_and_items():
     assert list(out["links"]["auto"]) == list(LINK_KEYS)
     assert out["links"]["pin"] == {"name": "NAS", "icon": None, "url": "http://192.168.1.251:5000", "new_tab": False}
     assert out["items"]["g:home"] == {"badge": "counter.open_windows", "show_when": None, "aliases": "house home"}
-    assert list(out["items"]["map"]) == list(ITEM_KEYS)
+    assert list(out["items"]["map"]) == [k for k in ITEM_KEYS if k != "color"]  # colour only when set (v0.6)
     # a panel the layout does not place (shown at the end) may still have extras
     assert out["items"]["energy"]["badge"] == "sensor.power"
     assert validate_layout(out) == out

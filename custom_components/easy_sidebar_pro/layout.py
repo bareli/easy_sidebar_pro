@@ -171,7 +171,10 @@ def _links(data: Any) -> dict[str, dict[str, Any]]:
 
 
 def _items(data: Any, groups: dict[str, Any], links: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    """Per-entry extras (badge entity, show-only-when entity, search words); empty entries are dropped."""
+    """Per-entry extras (badge entity, show-only-when entity, search words, icon colour); empty entries are dropped.
+
+    The colour is kept only when set, and only on panels and links: a group has its own colours.
+    """
     if not isinstance(data, dict):
         raise LayoutError("items must be an object")
     if len(data) > MAX_ENTRIES:
@@ -196,7 +199,12 @@ def _items(data: Any, groups: dict[str, Any], links: dict[str, Any]) -> dict[str
             "show_when": _entity(item.get("show_when"), f"{where}.show_when"),
             "aliases": _aliases(item.get("aliases"), f"{where}.aliases"),
         }
-        if clean["badge"] or clean["show_when"] or clean["aliases"]:
+        color = _color(item.get("color"), f"{where}.color")
+        if color is not None:
+            if key.startswith(GROUP_PREFIX):
+                raise LayoutError(f"{where}.color: a group's colours are set on the group")
+            clean["color"] = color
+        if clean["badge"] or clean["show_when"] or clean["aliases"] or color:
             out[key] = clean
     return out
 

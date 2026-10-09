@@ -8,7 +8,8 @@
 // Keys:             "p:<path>" for a panel, "g:<id>" for a group.
 // Links (v0.5):     `links: { id: { name, icon, url, new_tab } }`; a link is placed like a panel whose path is
 //                   "l:<id>" (in order, a group or the grid), so moving, grouping, pinning and tabs treat it as one.
-// Extras (v0.5):    `items: { "<path>" | "l:<id>" | "g:<id>": { badge, show_when, aliases } }` (entity ids, search words).
+// Extras (v0.5):    `items: { "<path>" | "l:<id>" | "g:<id>": { badge, show_when, aliases, color? } }` (entity ids, search words;
+//                    v0.6 icon colour, panels and links only, stored only when set).
 
 export const GROUP_PREFIX = "g:";
 export const LINK_PREFIX = "l:";
@@ -17,7 +18,7 @@ export const MAX_URL = 2000;
 export const MAX_ALIASES = 100;
 // Same lists as const.py LINK_KEYS / ITEM_KEYS.
 export const LINK_KEYS = ["name", "icon", "url", "new_tab"];
-export const ITEM_KEYS = ["badge", "show_when", "aliases"];
+export const ITEM_KEYS = ["badge", "show_when", "aliases", "color"];
 export const LAYOUT_VERSION = 1;
 export const MAX_NAME = 50;
 export const MAX_PINNED = 20;
@@ -194,14 +195,16 @@ export function cleanAliases(value) {
   return cpSlice(text, MAX_ALIASES).trim();
 }
 
-/** An entry's extras with defaults, or null when it has none. */
-export function cleanItem(item) {
+/** An entry's extras with defaults, or null when it has none. A colour is kept only when set and not on a group key. */
+export function cleanItem(item, key = "") {
   const out = {
     badge: validEntity(item?.badge) ? item.badge : null,
     show_when: validEntity(item?.show_when) ? item.show_when : null,
     aliases: cleanAliases(item?.aliases),
   };
-  return out.badge || out.show_when || out.aliases ? out : null;
+  const color = item?.color ?? null;
+  if (color !== null && validColor(color) && !key.startsWith(GROUP_PREFIX)) out.color = color;
+  return out.badge || out.show_when || out.aliases || out.color ? out : null;
 }
 
 /** A link as stored, or null when it cannot be saved (no name or no valid address). */
@@ -314,7 +317,7 @@ export function toLayout(tree, settings, meta = {}) {
   const items = {};
   for (const [key, item] of Object.entries(meta.items ?? {})) {
     const ok = key.startsWith(GROUP_PREFIX) ? !!groups[key.slice(GROUP_PREFIX.length)] : isLink(key) ? !!links[linkId(key)] : validPanel(key);
-    const clean = ok ? cleanItem(item) : null;
+    const clean = ok ? cleanItem(item, key) : null;
     if (clean) items[key] = clean;
   }
   return { version: LAYOUT_VERSION, order, groups, grid, settings: cleanSettings(settings), links, items };

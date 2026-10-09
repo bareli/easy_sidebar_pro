@@ -208,7 +208,7 @@ test("#53 the marker and dimming are applied when rows are built and patched in 
   assert.match(fn, /setAttr\(row, "title", text \|\| null\);/);
   assert.match(fn, /setAttr\(handle, "aria-description", text \|\| null\);/);
   assert.match(fn, /h\("span", \{ class: "rule", role: "img" \}, svg\(ICONS\.rule\)\)/);
-  assert.match(SRC, /this\.applyRule\(row, L\.itemKey\(key\)\);\n\s+return this\.optionsOpen === key/);
+  assert.match(SRC, /this\.applyRule\(row, L\.itemKey\(key\)\);\n\s+this\.applyItemColor\(row, L\.itemKey\(key\)\);\n\s+return this\.optionsOpen === key/);
   assert.match(SRC, /this\.applyRule\(head, key\);/);
   // setItem patches the row in place (no editor re-render that drops focus).
   const setItem = SRC.slice(SRC.indexOf("      setItem: (ikey, field, value) => {"), SRC.indexOf("      rename: (id, input) => {"));
