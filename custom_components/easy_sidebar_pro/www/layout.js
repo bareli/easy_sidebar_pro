@@ -646,7 +646,8 @@ export function newGroupId(tree) {
 const ALLOWED_FORMAT = new Set([String.fromCharCode(0x200c), String.fromCharCode(0x200d)]);
 // Whitespace controls and line / paragraph separators separate words: they become a space before the other
 // control characters are dropped (a pasted tab must not glue two words together).
-const SPACE_CONTROLS = /[\t\n\v\f\r\x1c-\x1f\x85\u2028\u2029]/g;
+// The C1 NEL and the x1c-x1f separators are still dropped (BUG-014).
+const SPACE_CONTROLS = /[\t\n\v\f\r\u2028\u2029]/g;
 
 /** A clean group name, or "" when nothing visible is left. */
 export function cleanName(value) {

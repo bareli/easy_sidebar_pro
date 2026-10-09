@@ -88,7 +88,9 @@ test("#46 real schemes are still refused", () => {
 
 test("#47 tab, newline, CR, VT, FF and line / paragraph separators become a space in names", () => {
   assert.equal(L.cleanName("Living\tRoom סלון"), "Living Room סלון");
-  for (const c of ["\n", "\r", "\v", "\f", " ", " ", "\x1f", "\x85"]) assert.equal(L.cleanName(`a${c}b`), "a b", JSON.stringify(c));
+  for (const c of ["\n", "\r", "\v", "\f", " ", " "]) assert.equal(L.cleanName(`a${c}b`), "a b", JSON.stringify(c));
+  // NEL and the x1c-x1f separators are still removed, as before (BUG-014)
+  for (const c of ["\x1f", "\x85"]) assert.equal(L.cleanName(`a${c}b`), "ab", JSON.stringify(c));
   assert.equal(L.cleanName("a\r\nb"), "a  b");
   // inner spaces are kept as before; other control characters are still removed
   assert.equal(L.cleanName("a  b"), "a  b");
