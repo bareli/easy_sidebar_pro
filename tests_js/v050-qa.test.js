@@ -102,6 +102,37 @@ test("#47 search words: a tab separates words", () => {
   assert.equal(L.cleanAliases("a\u2028b\x00c"), "a bc");
 });
 
+/* ---- #45 BUG-021: Done refuses while an option field shows an error ---- */
+
+const strings = (lang) => {
+  const start = SRC.indexOf(`  ${lang}: {`);
+  return SRC.slice(start, SRC.indexOf("\n  },", start));
+};
+
+test("#45 an empty link name has its own message in both languages", () => {
+  assert.match(strings("en"), /linkNameRequired: "Enter a link name",/);
+  assert.match(strings("he"), /linkNameRequired: "צריך שם לקישור",/);
+  assert.match(SRC, /if \(!name\) return t\(lang\(\), "linkNameRequired"\);\n\s+link\.name = name;/);
+});
+
+test("#45 Done and Set as default refuse while an option field is in error", () => {
+  assert.equal(SRC.match(/if \(e\.focusInvalidName\(\) \|\| e\.focusInvalidOption\(\) \|\| e\.focusInvalidLink\(\)\) return;/g)?.length, 2);
+  const body = SRC.slice(SRC.indexOf("  focusInvalidOption() {"), SRC.indexOf("  /** A link that cannot be saved"));
+  assert.match(body, /this\.set\(\{ optionsOpen: row \}, focusKey\)/);
+  assert.match(body, /error\.textContent = "";\n\s+setTimeout\(\(\) => \(error\.textContent = message\), 50\)/);
+});
+
+test("#45 every ⋮ text field records its error and shows it again after a re-render", () => {
+  const panel = SRC.slice(SRC.indexOf("  optionsPanel(key) {"), SRC.indexOf("  /** A link's name or icon changed"));
+  // link name, address, icon, badge + show-when (one helper), search words
+  assert.equal(panel.match(/errors,\n\s+row: key,/g)?.length, 5);
+  const field = SRC.slice(SRC.indexOf("function optField("), SRC.indexOf("class EspEditor"));
+  assert.match(field, /if \(message\) errors\?\.set\(focusKey, \{ row, value: input\.value, message \}\);\n\s+else errors\?\.delete\(focusKey\);/);
+  assert.match(field, /"aria-invalid": pending \? "true" : null,/);
+  assert.match(field, /"\.value": pending \? pending\.value : value \?\? "",/);
+  assert.match(SRC, /this\.optErrors = new Map\(\);/);
+});
+
 /* ---- #48 SEC-003: scheme matched in ASCII only (parity with layout.py) ---- */
 
 test("#48 httpſ:// and HTTPſ:// are refused, ASCII case variants accepted", () => {

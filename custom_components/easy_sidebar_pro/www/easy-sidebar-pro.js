@@ -170,6 +170,7 @@ const STRINGS = {
     movedGroup: "{name}: in {group}, position {pos}",
     grouped: "Group created with {a} and {b}",
     nameRequired: "Enter a group name",
+    linkNameRequired: "Enter a link name",
     hint: "Drag a row onto another row to make a group. The eye button hides or shows an item; the ⋮ button has more options.",
     addLink: "Add link",
     newLink: "New link",
@@ -299,6 +300,7 @@ const STRINGS = {
     movedGroup: "{name}: בקבוצה {group}, מקום {pos}",
     grouped: "נוצרה קבוצה עם {a} ועם {b}",
     nameRequired: "צריך שם לקבוצה",
+    linkNameRequired: "צריך שם לקישור",
     hint: "גררו שורה אל שורה אחרת כדי ליצור קבוצה. כפתור העין מסתיר או מציג פריט; בכפתור ⋮ יש אפשרויות נוספות.",
     addLink: "הוספת קישור",
     newLink: "קישור חדש",
@@ -718,16 +720,23 @@ function limitInput(input, max) {
   input.setSelectionRange?.(caret, caret);
 }
 
-/** One labelled text field of the ⋮ options: commits on Enter or when it loses focus; `commit` returns an error text or "". */
-function optField({ label, help = null, value, focusKey, dir = null, list = null, limit = null, placeholder = null, commit }) {
+/**
+ * One labelled text field of the ⋮ options: commits on Enter or when it loses focus; `commit` returns an error text or "".
+ * `errors` (focus key -> { row, value, message }) keeps a refused value and its message across re-renders, so Done can
+ * refuse while a field is in error (BUG-021); `row` is the layout key of the row the options belong to.
+ */
+function optField({ label, help = null, value, focusKey, dir = null, list = null, limit = null, placeholder = null, errors = null, row = null, commit }) {
   const errId = `err-${focusKey.replace(/[^A-Za-z0-9_-]/g, "_")}`;
   const helpId = help ? `help-${errId}` : null;
-  const error = h("div", { class: "error", id: errId, role: "alert" });
+  const pending = errors?.get(focusKey);
+  const error = h("div", { class: "error", id: errId, role: "alert" }, pending?.message ?? null);
   const run = (input) => {
     const message = commit(input);
     if (message) input.setAttribute("aria-invalid", "true");
     else input.removeAttribute("aria-invalid");
     error.textContent = message || "";
+    if (message) errors?.set(focusKey, { row, value: input.value, message });
+    else errors?.delete(focusKey);
   };
   return [
     h(
@@ -742,8 +751,9 @@ function optField({ label, help = null, value, focusKey, dir = null, list = null
         spellcheck: "false",
         autocomplete: "off",
         "aria-describedby": [errId, helpId].filter(Boolean).join(" "),
+        "aria-invalid": pending ? "true" : null,
         "data-focus-key": focusKey,
-        ".value": value ?? "",
+        ".value": pending ? pending.value : value ?? "",
         oninput: (e) => {
           if (limit) limitInput(e.target, limit);
           e.target.removeAttribute("aria-invalid");
@@ -806,6 +816,8 @@ class EspEditor extends HTMLElement {
     this.iconEditing = null;
     // Group id -> what the user left in a name field that is not a valid name (shown with its error).
     this.nameErrors = new Map();
+    // ⋮ option fields left in error (focus key -> { row, value, message }); Done refuses while any is.
+    this.optErrors = new Map();
     // The row whose ⋮ options are open (one at a time), and the entity ids its fields suggest.
     this.optionsOpen = null;
     this._entities = h("datalist", { id: "esp-entities" }, (opts.entities ?? []).map((e) => h("option", { value: e })));
@@ -947,6 +959,7 @@ class EspEditor extends HTMLElement {
     const active = root.activeElement;
     const focusKey = this.focusKey ?? active?.dataset?.focusKey ?? null;
     for (const id of [...this.nameErrors.keys()]) if (!this.tree.some((n) => n.type === "group" && n.id === id)) this.nameErrors.delete(id);
+    for (const [k, { row }] of [...this.optErrors]) if (!L.locate(this.tree, row)) this.optErrors.delete(k);
 
     const bar = h(
       "div",
@@ -1449,6 +1462,7 @@ class EspEditor extends HTMLElement {
     const ikey = L.itemKey(key);
     const item = this.item(ikey);
     const fk = (field) => `opt:${field}:${key}`;
+    const errors = this.optErrors;
     const parts = [];
     if (path && L.isLink(path)) {
       const id = L.linkId(path);
@@ -1458,6 +1472,8 @@ class EspEditor extends HTMLElement {
           label: t(lang, "linkName"),
           value: link.name,
           focusKey: fk("name"),
+          errors,
+          row: key,
           limit: L.MAX_NAME,
           commit: (input) => this.actions.setLink(id, "name", input.value),
         }),
@@ -1466,6 +1482,8 @@ class EspEditor extends HTMLElement {
           help: t(lang, "linkUrlHelp"),
           value: link.url,
           focusKey: fk("url"),
+          errors,
+          row: key,
           dir: "ltr",
           limit: L.MAX_URL,
           placeholder: "/config/automation",
@@ -1475,6 +1493,8 @@ class EspEditor extends HTMLElement {
           label: t(lang, "linkIcon"),
           value: link.icon,
           focusKey: fk("icon"),
+          errors,
+          row: key,
           dir: "ltr",
           placeholder: DEFAULT_LINK_ICON,
           commit: (input) => this.actions.setLink(id, "icon", input.value),
@@ -1516,6 +1536,8 @@ class EspEditor extends HTMLElement {
         help: t(lang, help),
         value: item[field],
         focusKey: fk(field),
+        errors,
+        row: key,
         dir: "ltr",
         list: "esp-entities",
         placeholder: field === "badge" ? "sensor.open_windows" : "binary_sensor.alarm",
@@ -1529,6 +1551,8 @@ class EspEditor extends HTMLElement {
         help: t(lang, "aliasesHelp"),
         value: item.aliases,
         focusKey: fk("aliases"),
+        errors,
+        row: key,
         limit: L.MAX_ALIASES,
         commit: (input) => this.actions.setItem(ikey, "aliases", input.value),
       }),
@@ -1569,6 +1593,25 @@ class EspEditor extends HTMLElement {
     }
     this._q(`[data-opts="${CSS.escape(key)}"]`)?.setAttribute("aria-label", t(this.lang, "options", { name: info.title }));
     this._q(`[data-focus-key="${CSS.escape(`opt:remove:${key}`)}"]`)?.setAttribute("aria-label", t(this.lang, "removeLink", { name: info.title }));
+  }
+
+  /** A ⋮ option field shows an error: open that row's options, focus the field and say it again. Returns whether one did. */
+  focusInvalidOption() {
+    for (const [focusKey, { row, message }] of this.optErrors) {
+      if (!L.locate(this.tree, row)) {
+        this.optErrors.delete(focusKey);
+        continue;
+      }
+      this.set({ optionsOpen: row }, focusKey);
+      const input = this._q(`[data-focus-key="${CSS.escape(focusKey)}"]`);
+      const error = input && this._q(`#${CSS.escape(input.getAttribute("aria-describedby").split(" ")[0])}`);
+      if (error) {
+        error.textContent = "";
+        setTimeout(() => (error.textContent = message), 50);
+      }
+      return true;
+    }
+    return false;
   }
 
   /** A link that cannot be saved (no valid address): open its options, focus the address and say why. */
@@ -2852,7 +2895,7 @@ class Controller {
     return {
       done: () => {
         const e = ed();
-        if (e.focusInvalidName() || e.focusInvalidLink()) return;
+        if (e.focusInvalidName() || e.focusInvalidOption() || e.focusInvalidLink()) return;
         const kind = L.editKind(this.edit.baseTree, e.tree, this.edit.baseHidden, e.hiddenSet, this.edit.baseSettings, e.settings, this.edit.baseMeta, e.meta);
         if (kind === "none") return this.stopEdit();
         const onDefault = !this.data.own && !!this.data.default;
@@ -2889,7 +2932,7 @@ class Controller {
         if (!link) return "";
         if (field === "name") {
           const name = L.cleanName(value);
-          if (!name) return t(lang(), "nameRequired");
+          if (!name) return t(lang(), "linkNameRequired");
           link.name = name;
         } else if (field === "url") {
           const url = L.normalizeUrl(value, location.origin);
@@ -3008,7 +3051,7 @@ class Controller {
           const settings = L.cleanSettings(this.data.default?.settings);
           await this.writeNative(tree, this.edit.baseHidden);
           e.set(
-            { tree, settings, meta: L.metaOf(this.data.default), optionsOpen: null, hiddenSet: new Set(this.edit.baseHidden), confirming: null, notice: "", error: "", status: t(lang(), "resetDone") },
+            { tree, settings, meta: L.metaOf(this.data.default), optionsOpen: null, optErrors: new Map(), hiddenSet: new Set(this.edit.baseHidden), confirming: null, notice: "", error: "", status: t(lang(), "resetDone") },
             "done",
           );
           rebase();
@@ -3029,7 +3072,7 @@ class Controller {
       },
       setDefault: async () => {
         const e = ed();
-        if (e.focusInvalidName() || e.focusInvalidLink()) return;
+        if (e.focusInvalidName() || e.focusInvalidOption() || e.focusInvalidLink()) return;
         if (!(await this.save(e.tree, e.hiddenSet, false))) return e.set({ confirming: null });
         try {
           await this.hass.callWS({ type: `${DOMAIN}/default/set`, layout: L.toLayout(e.tree, e.settings, e.meta) });
