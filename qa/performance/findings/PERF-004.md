@@ -6,7 +6,7 @@
 | Severity | LOW |
 | Evidence basis | MEASURED |
 | Status | OPEN - not filed (this run was told not to file issues) |
-| Issue | |
+| Issue | [#49](https://github.com/bareli/easy_sidebar_pro/issues/49) |
 | Feature | Group header `EspGroup.update`, `Controller.afterUpdate` |
 | Test case | PERF |
 | Environment | dev, instance 8175, HA 2026.9.4, Playwright Chromium headless, 61 sidebar panels (50 extra dashboards), 20 groups, 30 links, 20 badges, 10 show_when, search on, warm |

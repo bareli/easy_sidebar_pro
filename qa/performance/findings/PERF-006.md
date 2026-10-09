@@ -6,7 +6,7 @@
 | Severity | LOW |
 | Evidence basis | MEASURED |
 | Status | OPEN - not filed (this run was told not to file issues) |
-| Issue | |
+| Issue | [#51](https://github.com/bareli/easy_sidebar_pro/issues/51) |
 | Feature | `patch()` connectedCallback / disconnectedCallback, `Controller.disconnect` |
 | Test case | PERF |
 | Environment | dev, instance 8175, HA 2026.9.4, Playwright Chromium headless, warm |
