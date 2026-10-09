@@ -598,6 +598,9 @@ const EDITOR_CSS = `
   --esp-action-color: color-mix(in srgb, var(--primary-color) 60%, var(--primary-text-color, #212121));
   --esp-fill-color: var(--primary-color);
   --esp-fill-color: color-mix(in srgb, var(--primary-color) 65%, black);
+  /* Own fill for the danger button: white text stays >= 4.5:1 although --esp-error-color is lightened in dark themes, BUG-024. */
+  --esp-danger-fill: var(--error-color, #db4437);
+  --esp-danger-fill: color-mix(in srgb, var(--error-color, #db4437) 70%, black);
   --esp-error-color: var(--error-color, #db4437);
   /* 70%: 4.5:1 also on the lighter options panel in dark themes (secondary-background-color), BUG-019. */
   --esp-error-color: color-mix(in srgb, var(--error-color, #db4437) 70%, var(--primary-text-color, #212121)); }
@@ -667,7 +670,7 @@ button { font: inherit; color: inherit; }
 .footer-section + .footer-section { border-top: 1px solid var(--divider-color); margin-top: 6px; padding-top: 8px; }
 .footer-heading { color: var(--secondary-text-color); font-size: var(--ha-font-size-s, 12px); font-weight: var(--ha-font-weight-medium, 500); }
 .confirm { display: flex; flex-direction: column; gap: 8px; padding: 8px; border: 1px solid var(--divider-color); border-radius: 8px; line-height: 1.4; }
-.btn.danger { background: var(--esp-error-color); border-color: var(--esp-error-color); color: #fff; }
+.btn.danger { background: var(--esp-danger-fill); border-color: var(--esp-danger-fill); color: #fff; }
 .group[data-color] { border-inline-start: 4px solid var(--esp-own-line); }
 .group > .row.head .icon { color: var(--esp-own-icon-color, var(--sidebar-icon-color, var(--secondary-text-color))); }
 .sub { color: var(--secondary-text-color); font-size: var(--ha-font-size-s, 12px); font-weight: var(--ha-font-weight-medium, 500); margin-top: 4px; }
