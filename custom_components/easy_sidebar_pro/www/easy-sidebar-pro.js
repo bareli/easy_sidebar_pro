@@ -590,7 +590,8 @@ class EspGroup extends HTMLElement {
       setAttr(this._row, "aria-expanded", String(!row.collapsed));
       setAttr(this._row, "aria-label", `${row.name}, ${count}${said}`);
     }
-    const title = iconOnly ? row.name : "";
+    // The rail's full-name tooltip: HA's ha-tooltip beside the row when the controller draws one (UX-019), else a title.
+    const title = iconOnly && !this.tipped ? row.name : "";
     if (this.title !== title) this.title = title;
   }
 }
@@ -2157,6 +2158,9 @@ class Controller {
     this.editing = false;
     this.dirty = false;
     this.groupEls = new Map();
+    // The rail's ha-tooltip per group (UX-019), and the counter behind the group elements' ids.
+    this.groupTips = new Map();
+    this.groupSeq = 0;
     this.rowGroups = new Map();
     this.groupNames = new Map();
     this.descIds = new Map();
@@ -2428,16 +2432,42 @@ class Controller {
       let el = this.groupEls.get(r.id);
       if (!el) {
         el = document.createElement("esp-group");
+        // Layout ids are free text: the element id (the tooltip's anchor) is a counter.
+        el.id = `esp-group-${++this.groupSeq}`;
         this.groupEls.set(r.id, el);
       }
+      const tip = this.groupTip(r, el, iconOnly, rtl);
+      el.tipped = !!tip;
       // While searching, groups show unfolded with their matches: a click does not fold them; a tabbed
       // group found by one of its panels opens that tab.
-      el.onToggle = r.tabbed ? () => this.openTabs(r.id, r.match ? [r.match] : r.paths) : searching ? () => {} : () => this.toggle(r.id);      el.update(r, this.lang, iconOnly, rtl, this.groupLooks.get(r.id), this.settings.header, this.settings.hide_count);
-      return el;
+      el.onToggle = r.tabbed ? () => this.openTabs(r.id, r.match ? [r.match] : r.paths) : searching ? () => {} : () => this.toggle(r.id);
+      el.update(r, this.lang, iconOnly, rtl, this.groupLooks.get(r.id), this.settings.header, this.settings.hide_count);
+      return tip ? [el, tip] : el;
     });
     for (const id of [...this.groupEls.keys()]) if (!used.has(id)) this.groupEls.delete(id);
+    for (const id of [...this.groupTips.keys()]) if (!used.has(id)) this.groupTips.delete(id);
     if (this.settings.search) out.unshift(this.searchBox(iconOnly, rows.length > 0));
     return out;
+  }
+
+  /**
+   * In the icon-only rail a group gets HA's own tooltip with its full name, drawn as HA's _renderToolTip does for
+   * its rows: an <ha-tooltip for="<row id>"> beside the row, beside the sidebar's edge (left in RTL). Feature
+   * detected: without ha-tooltip the group keeps a title. The row's accessible name is unchanged.
+   */
+  groupTip(row, el, iconOnly, rtl) {
+    if (!iconOnly || !customElements.get("ha-tooltip")) return null;
+    let tip = this.groupTips.get(row.id);
+    if (!tip) {
+      tip = document.createElement("ha-tooltip");
+      tip.setAttribute("show-delay", "0");
+      tip.setAttribute("hide-delay", "0");
+      this.groupTips.set(row.id, tip);
+    }
+    setAttr(tip, "for", el.id);
+    setAttr(tip, "placement", rtl ? "left" : "right");
+    setText(tip, row.name);
+    return tip;
   }
 
   /** The search box, one element for the life of the sidebar (it keeps its focus and caret across renders). */

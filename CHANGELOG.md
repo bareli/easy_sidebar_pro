@@ -10,6 +10,7 @@
 - Link addresses typed without a scheme: home network addresses (IP, `nas.local`, `router.lan`, any address with a port) get `http://`, other web names `https://`; a single word is a Home Assistant page.
 - Clearer Hebrew wording in the editor (badge field, address error, Undo, "אפשרויות נוספות", one consistent register); the address error now says http or https.
 - Hebrew editor: the add buttons read "קבוצה" and "קישור" on one line; the full text is their tooltip and accessible name.
+- Icon-only sidebar: groups show Home Assistant's own tooltip with their full name, like the other items.
 - A link's icon field has tappable suggested icons, like a group's, plus router, NAS, web, robot, cog and link icons.
 - Editor on phones: the hint folds behind a **?** button, and the drag handle, eye and ⋮ buttons are 44 px tap targets.
 - The editor hint says where to turn on the search box (Display options; search stays off by default).

@@ -143,6 +143,22 @@ test("#59 a link chip fills the icon field and commits it through the field (no 
   assert.match(SRC, /for \(const chip of this\.shadowRoot\.querySelectorAll\(`\[data-link-chip="\$\{CSS\.escape\(id\)\}"\]`\)\)\n\s+chip\.setAttribute\("aria-pressed", String\(chip\.getAttribute\("aria-label"\) === own\)\);/);
 });
 
+/* ---- #61 UX-019: rail groups get HA's ha-tooltip ---- */
+
+test("#61 a rail group gets an <ha-tooltip for=row id> sibling with its full name, placement by direction, feature detected", () => {
+  const fn = SRC.slice(SRC.indexOf("  groupTip(row, el, iconOnly, rtl) {"), SRC.indexOf("  /** The search box, one element"));
+  assert.match(fn, /if \(!iconOnly \|\| !customElements\.get\("ha-tooltip"\)\) return null;/);
+  assert.match(fn, /document\.createElement\("ha-tooltip"\)/);
+  assert.match(fn, /setAttr\(tip, "for", el\.id\);/);
+  assert.match(fn, /setAttr\(tip, "placement", rtl \? "left" : "right"\);/);
+  assert.match(fn, /setText\(tip, row\.name\);/);
+  assert.match(SRC, /el\.id = `esp-group-\$\{\+\+this\.groupSeq\}`;/);
+  assert.match(SRC, /return tip \? \[el, tip\] : el;/);
+  // Fallback: the title only when no ha-tooltip is drawn; the accessible name is unchanged.
+  assert.match(SRC, /const title = iconOnly && !this\.tipped \? row\.name : "";/);
+  assert.match(SRC, /setAttr\(this\._row, "aria-label", `\$\{row\.name\}, \$\{count\}\$\{said\}`\);/);
+});
+
 /* ---- #62 UX-020: the hint says where the search box is ---- */
 
 test("#62 the editor hint ends with where to turn on the search box", () => {
