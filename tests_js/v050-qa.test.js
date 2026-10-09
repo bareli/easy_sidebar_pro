@@ -199,6 +199,22 @@ test("#49 the pencil and collapse-all buttons write only on change", () => {
   assert.match(block, /setAttr\(edit, "aria-label", editLabel\);\n\s+if \(edit\.title !== editLabel\) edit\.title = editLabel;/);
 });
 
+/* ---- #50 PERF-005: navigation refreshes only when the selected link changes ---- */
+
+test("#50 location-changed / popstate refresh only when the selected internal link differs from the rendered one", () => {
+  const start = SRC.indexOf("this.onLocation = () => {");
+  const handler = SRC.slice(start, SRC.indexOf("\n      };", start));
+  assert.ok(start > 0);
+  assert.match(handler, /if \(L\.linkAt\(links, location\.pathname\) !== this\.renderedLink\) this\.refresh\(\);/);
+  assert.equal(handler.match(/this\.refresh\(\)/g)?.length, 1);
+  assert.match(SRC, /const at = \(this\.renderedLink = L\.linkAt\(layout\?\.links, location\.pathname\)\);/);
+  // the comparison is meaningful: the same page keeps the same link, another page under it too
+  const links = { a: { url: "/lovelace" }, b: { url: "/lovelace/cameras" } };
+  assert.equal(L.linkAt(links, "/lovelace/0"), L.linkAt(links, "/lovelace/1"));
+  assert.notEqual(L.linkAt(links, "/lovelace/cameras"), L.linkAt(links, "/lovelace/0"));
+  assert.equal(L.linkAt(links, "/map"), null);
+});
+
 /* ---- #48 SEC-003: scheme matched in ASCII only (parity with layout.py) ---- */
 
 test("#48 httpſ:// and HTTPſ:// are refused, ASCII case variants accepted", () => {

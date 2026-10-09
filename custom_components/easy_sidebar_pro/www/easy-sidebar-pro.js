@@ -2128,8 +2128,12 @@ class Controller {
     this.connectNative();
     // An internal link is selected by the page's path, which can change inside one panel (dashboard views).
     if (!this.onLocation) {
+      // HA re-renders for the route itself (and fires location-changed twice per click): refresh only when the
+      // selected internal link differs from the one the last render used (PERF-005).
       this.onLocation = () => {
-        if (Object.keys(this.data?.layout?.links ?? {}).length) this.refresh();
+        const links = this.data?.layout?.links;
+        if (!links || !Object.keys(links).length) return;
+        if (L.linkAt(links, location.pathname) !== this.renderedLink) this.refresh();
       };
       window.addEventListener("location-changed", this.onLocation);
       window.addEventListener("popstate", this.onLocation);
@@ -2272,7 +2276,7 @@ class Controller {
     const off = L.hiddenByCondition(layout, (e) => L.entityActive(states[e]));
     const visible = (this.visible = [...byPath.keys(), ...L.linkPaths(layout)].filter((p) => !off.has(p)));
     // An internal link whose page is open is the selected row (the longest match), instead of HA's panel.
-    const at = L.linkAt(layout?.links, location.pathname);
+    const at = (this.renderedLink = L.linkAt(layout?.links, location.pathname));
     selected = at && visible.includes(at) ? at : selected;
     this.selected = selected;
     if (this.editing) return [this.editor];
