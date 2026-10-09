@@ -29,7 +29,8 @@ PANEL = re.compile(r"[A-Za-z0-9_-]{1,100}")
 ENTITY_ID = re.compile(r"[a-z0-9_]{1,64}\.[a-z0-9_]{1,255}")
 # A link opens a page of this Home Assistant ("/config/automation") or a web address (http / https only).
 URL_INTERNAL = re.compile(r"/(?![/\\])\S*")
-URL_EXTERNAL = re.compile(r"https?://[^\s/\\?#]+\S*", re.IGNORECASE)
+# The scheme is matched in ASCII only: re.IGNORECASE folds "ſ" (U+017F) to "s" and "K" (U+212A) to "k" (SEC-003).
+URL_EXTERNAL = re.compile(r"[hH][tT][tT][pP][sS]?://[^\s/\\?#]+\S*")
 ICON = re.compile(r"[a-z0-9_-]{1,20}:[a-z0-9_-]{1,64}")
 HEX_COLOR = re.compile(r"#[0-9a-fA-F]{6}|#[0-9a-fA-F]{3}")
 # `prefix:name` icon sets stay open (mdi, hass, custom sets), but URI schemes are never icon sets.

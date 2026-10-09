@@ -47,3 +47,17 @@ def test_44_lone_surrogates_refused_in_search_words_and_addresses():
     with pytest.raises(LayoutError):
         validate_layout(_with_link(aliases=EMOJI * 101))
     assert validate_layout(_with_link(url="/" + EMOJI * 1999))["links"]["a"]["url"] == "/" + EMOJI * 1999
+
+
+# ---- #48 SEC-003: the scheme is matched in ASCII only (parity with www/layout.js validUrl) ----
+
+
+@pytest.mark.parametrize("bad", ["http\u017f://example.invalid", "HTTP\u017f://example.invalid", "\u017fttp://x.invalid"])
+def test_48_long_s_scheme_refused(bad):
+    with pytest.raises(LayoutError):
+        validate_layout(_with_link(url=bad))
+
+
+@pytest.mark.parametrize("ok", ["HTTPS://example.com", "Http://example.com/x", "hTtPs://nas.local:5000"])
+def test_48_ascii_case_variants_accepted(ok):
+    assert validate_layout(_with_link(url=ok))["links"]["a"]["url"] == ok

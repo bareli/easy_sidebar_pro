@@ -99,5 +99,13 @@ test("#47 tab, newline, CR, VT, FF and line / paragraph separators become a spac
 test("#47 search words: a tab separates words", () => {
   assert.equal(L.cleanAliases("מילה   word\tתג"), "מילה word תג");
   assert.equal(L.cleanAliases("a\tb c"), "a b c");
-  assert.equal(L.cleanAliases("a b\x00c"), "a bc");
+  assert.equal(L.cleanAliases("a\u2028b\x00c"), "a bc");
+});
+
+/* ---- #48 SEC-003: scheme matched in ASCII only (parity with layout.py) ---- */
+
+test("#48 httpſ:// and HTTPſ:// are refused, ASCII case variants accepted", () => {
+  for (const bad of ["http\u017f://example.invalid", "HTTP\u017f://example.invalid", "\u017fttp://x.invalid"]) assert.ok(!L.validUrl(bad), bad);
+  for (const ok of ["HTTPS://example.com", "Http://example.com/x", "hTtPs://nas.local:5000"]) assert.ok(L.validUrl(ok), ok);
+  assert.match(fs.readFileSync(new URL("../custom_components/easy_sidebar_pro/layout.py", import.meta.url), "utf8"), /URL_EXTERNAL = re\.compile\(r"\[hH\]\[tT\]\[tT\]\[pP\]\[sS\]\?:\/\/[^\n]*"\)\r?\n/);
 });

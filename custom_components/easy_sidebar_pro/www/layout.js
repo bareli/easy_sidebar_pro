@@ -114,7 +114,8 @@ export const linkPaths = (layout) => Object.keys(layout?.links ?? {}).filter((id
 
 // Same rules as layout.py URL_INTERNAL / URL_EXTERNAL: a page of this Home Assistant or an http(s) address.
 const URL_INTERNAL = /^\/(?![/\\])\S*$/;
-const URL_EXTERNAL = /^https?:\/\/[^\s/\\?#]+\S*$/i;
+// The scheme in ASCII only, written out as layout.py does (no case folding of "ſ" or "K").
+const URL_EXTERNAL = /^[hH][tT][tT][pP][sS]?:\/\/[^\s/\\?#]+\S*$/;
 export function validUrl(value) {
   if (typeof value !== "string" || !value.length || cpLength(value) > MAX_URL || value.includes("\\") || /[\p{C}\p{Z}]/u.test(value)) return false;
   return URL_INTERNAL.test(value) || URL_EXTERNAL.test(value);
