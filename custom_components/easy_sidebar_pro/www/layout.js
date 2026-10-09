@@ -82,6 +82,27 @@ export function buildTree(layout, paths, withPins = false) {
 const PANEL_RE = /^[A-Za-z0-9_-]{1,100}$/;
 export const validPanel = (path) => typeof path === "string" && PANEL_RE.test(path);
 
+/* ------------------------------------------------------------------ text length */
+
+// Lengths are counted in code points, like Python's len() on the server: an emoji is one character, and a
+// cut never falls inside a surrogate pair. A lone surrogate cannot be sent (HA's JSON parser refuses it).
+export const cpLength = (text) => [...text].length;
+export const cpSlice = (text, max) => (text.length <= max ? text : [...text].slice(0, max).join(""));
+export const stripSurrogates = (text) => text.replace(/\p{Cs}/gu, "");
+
+/**
+ * A text field limited to `max` code points (what `maxlength` does in UTF-16 units): what was just typed or
+ * pasted before the caret is cut to fit, the rest is kept, and the caret stays after the kept text.
+ * Returns { value, caret }; unchanged when the value fits.
+ */
+export function limitText(value, caret, max) {
+  if (cpLength(value) <= max) return { value, caret };
+  const at = Math.max(0, Math.min(caret ?? value.length, value.length));
+  const after = cpSlice(value.slice(at), max);
+  const before = cpSlice(value.slice(0, at), Math.max(0, max - cpLength(after)));
+  return { value: before + after, caret: before.length };
+}
+
 /* ------------------------------------------------------------------ links and extras */
 
 const ID_RE = /^[a-z0-9]{1,16}$/;
@@ -93,9 +114,10 @@ export const linkPaths = (layout) => Object.keys(layout?.links ?? {}).filter((id
 
 // Same rules as layout.py URL_INTERNAL / URL_EXTERNAL: a page of this Home Assistant or an http(s) address.
 const URL_INTERNAL = /^\/(?![/\\])\S*$/;
-const URL_EXTERNAL = /^https?:\/\/[^\s/\\?#]+\S*$/i;
+// The scheme in ASCII only, written out as layout.py does (no case folding of "ſ" or "K").
+const URL_EXTERNAL = /^[hH][tT][tT][pP][sS]?:\/\/[^\s/\\?#]+\S*$/;
 export function validUrl(value) {
-  if (typeof value !== "string" || !value.length || value.length > MAX_URL || value.includes("\\") || /[\p{C}\p{Z}]/u.test(value)) return false;
+  if (typeof value !== "string" || !value.length || cpLength(value) > MAX_URL || value.includes("\\") || /[\p{C}\p{Z}]/u.test(value)) return false;
   return URL_INTERNAL.test(value) || URL_EXTERNAL.test(value);
 }
 export const isExternal = (url) => /^https?:\/\//i.test(url ?? "");
@@ -105,11 +127,14 @@ export const isExternal = (url) => /^https?:\/\//i.test(url ?? "");
  * "example.com" -> "https://example.com"; a full address of this Home Assistant -> its path.
  * Returns null when it is not a usable address.
  */
+const HOST_PORT = /^(?:localhost|[a-z0-9-]+(?:\.[a-z0-9-]+)+):\d{1,5}(?:[/?#]|$)/i;
 export function normalizeUrl(value, origin = null) {
-  let text = String(value ?? "").trim();
+  let text = stripSurrogates(String(value ?? "")).trim();
   if (!text) return null;
   if (origin && text.toLowerCase().startsWith(origin.toLowerCase())) text = text.slice(origin.length) || "/";
-  if (!text.startsWith("/") && !/^[a-z][a-z0-9+.-]*:/i.test(text)) text = /^[^/\s]+\.[a-z]{2,}(?:[:/?#]|$)/i.test(text) || /^\d+\.\d+\.\d+\.\d+/.test(text) ? `https://${text}` : `/${text}`;
+  // "nas.local:5000", "localhost:8123/x": a host with a port, not a scheme (a scheme may contain dots).
+  if (HOST_PORT.test(text)) text = `https://${text}`;
+  else if (!text.startsWith("/") && !/^[a-z][a-z0-9+.-]*:/i.test(text)) text = /^[^/\s]+\.[a-z]{2,}(?:[:/?#]|$)/i.test(text) || /^\d+\.\d+\.\d+\.\d+/.test(text) ? `https://${text}` : `/${text}`;
   return validUrl(text) ? text : null;
 }
 
@@ -136,15 +161,15 @@ export function linkAt(links, pathname) {
 const ENTITY_RE = /^[a-z0-9_]{1,64}\.[a-z0-9_]{1,255}$/;
 export const validEntity = (value) => typeof value === "string" && ENTITY_RE.test(value);
 
-/** Search words as stored: control characters dropped, spaces collapsed, at most MAX_ALIASES characters. */
+/** Search words as stored: control characters dropped, spaces collapsed, at most MAX_ALIASES characters (code points). */
 export function cleanAliases(value) {
-  return String(value ?? "")
-    .replace(/[\p{Cc}\p{Cf}]/gu, (c) => (ALLOWED_FORMAT.has(c) ? c : ""))
+  const text = String(value ?? "")
+    .replace(SPACE_CONTROLS, " ")
+    .replace(/[\p{Cc}\p{Cf}\p{Cs}]/gu, (c) => (ALLOWED_FORMAT.has(c) ? c : ""))
     .split(/\s+/)
     .filter(Boolean)
-    .join(" ")
-    .slice(0, MAX_ALIASES)
-    .trim();
+    .join(" ");
+  return cpSlice(text, MAX_ALIASES).trim();
 }
 
 /** An entry's extras with defaults, or null when it has none. */
@@ -619,14 +644,18 @@ export function newGroupId(tree) {
 // Same rules as layout.py: control (Cc) and format (Cf) characters are not allowed, except the
 // joiners real text needs (ZWNJ, ZWJ); a name needs at least one visible character.
 const ALLOWED_FORMAT = new Set([String.fromCharCode(0x200c), String.fromCharCode(0x200d)]);
+// Whitespace controls and line / paragraph separators separate words: they become a space before the other
+// control characters are dropped (a pasted tab must not glue two words together).
+// The C1 NEL and the x1c-x1f separators are still dropped (BUG-014).
+const SPACE_CONTROLS = /[\t\n\v\f\r\u2028\u2029]/g;
 
 /** A clean group name, or "" when nothing visible is left. */
 export function cleanName(value) {
-  const name = String(value ?? "")
-    .replace(/[\p{Cc}\p{Cf}]/gu, (c) => (ALLOWED_FORMAT.has(c) ? c : ""))
-    .trim()
-    .slice(0, MAX_NAME)
+  const text = String(value ?? "")
+    .replace(SPACE_CONTROLS, " ")
+    .replace(/[\p{Cc}\p{Cf}\p{Cs}]/gu, (c) => (ALLOWED_FORMAT.has(c) ? c : ""))
     .trim();
+  const name = cpSlice(text, MAX_NAME).trim();
   return /[^\p{C}\p{Z}]/u.test(name) ? name : "";
 }
 

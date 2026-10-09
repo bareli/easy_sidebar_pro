@@ -79,8 +79,9 @@ test("folding ignores tabbed groups (accordion, collapse all)", () => {
 });
 
 test("sidebar row: a link, current while one of its tabs is open; no count or chevron", () => {
-  assert.match(SRC, /this\._row\.setAttribute\("role", tabbed \? "link" : "button"\);/);
-  assert.match(SRC, /this\._row\.setAttribute\("aria-current", "page"\)/);
+  // Written through the on-change helper since PERF-004 (#49).
+  assert.match(SRC, /setAttr\(this\._row, "role", tabbed \? "link" : "button"\);/);
+  assert.match(SRC, /setAttr\(this\._row, "aria-current", row\.selected \? "page" : null\)/);
   assert.match(SRC, /:host\(\[tabbed\]\) \.count, :host\(\[tabbed\]\) \.chev \{ display: none; \}/);
 });
 

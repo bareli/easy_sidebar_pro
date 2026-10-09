@@ -29,7 +29,8 @@ PANEL = re.compile(r"[A-Za-z0-9_-]{1,100}")
 ENTITY_ID = re.compile(r"[a-z0-9_]{1,64}\.[a-z0-9_]{1,255}")
 # A link opens a page of this Home Assistant ("/config/automation") or a web address (http / https only).
 URL_INTERNAL = re.compile(r"/(?![/\\])\S*")
-URL_EXTERNAL = re.compile(r"https?://[^\s/\\?#]+\S*", re.IGNORECASE)
+# The scheme is matched in ASCII only: re.IGNORECASE folds "ſ" (U+017F) to "s" and "K" (U+212A) to "k" (SEC-003).
+URL_EXTERNAL = re.compile(r"[hH][tT][tT][pP][sS]?://[^\s/\\?#]+\S*")
 ICON = re.compile(r"[a-z0-9_-]{1,20}:[a-z0-9_-]{1,64}")
 HEX_COLOR = re.compile(r"#[0-9a-fA-F]{6}|#[0-9a-fA-F]{3}")
 # `prefix:name` icon sets stay open (mdi, hass, custom sets), but URI schemes are never icon sets.
@@ -51,6 +52,8 @@ def _name(value: Any, where: str) -> str:
     if not 1 <= len(name) <= MAX_NAME:
         raise LayoutError(f"{where}: name must be 1-{MAX_NAME} characters")
     categories = [unicodedata.category(c) for c in name]
+    if "Cs" in categories:
+        raise LayoutError(f"{where}: name contains half of a character (lone surrogate)")
     if "Cc" in categories:
         raise LayoutError(f"{where}: name contains control characters")
     if any(cat == "Cf" and c not in _ALLOWED_FORMAT for c, cat in zip(name, categories)):
@@ -141,7 +144,7 @@ def _aliases(value: Any, where: str) -> str:
         return ""
     if not isinstance(value, str) or len(value) > MAX_ALIASES:
         raise LayoutError(f"{where}: search words must be text of at most {MAX_ALIASES} characters")
-    if any(unicodedata.category(c) == "Cc" or (unicodedata.category(c) == "Cf" and c not in _ALLOWED_FORMAT) for c in value):
+    if any(unicodedata.category(c) in ("Cc", "Cs") or (unicodedata.category(c) == "Cf" and c not in _ALLOWED_FORMAT) for c in value):
         raise LayoutError(f"{where}: search words contain control characters")
     return " ".join(value.split())
 

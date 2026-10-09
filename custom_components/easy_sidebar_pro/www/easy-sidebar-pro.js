@@ -6,6 +6,10 @@ const L = await import(`./layout.js${new URL(import.meta.url).search}`);
 
 const DOMAIN = "easy_sidebar_pro";
 const ctrls = new WeakMap();
+// Controllers holding subscriptions and window listeners. ha-sidebar's connected / disconnected callbacks
+// cannot be patched (a custom element's lifecycle callbacks are read once, at define()), so a controller
+// whose sidebar left the page is let go when another sidebar appears or on its next location event (PERF-006).
+const live = new Set();
 // Whether HA's sidebar has the fixed-panel renderer the bottom grid draws into (feature detection).
 let gridSupported = false;
 
@@ -170,6 +174,7 @@ const STRINGS = {
     movedGroup: "{name}: in {group}, position {pos}",
     grouped: "Group created with {a} and {b}",
     nameRequired: "Enter a group name",
+    linkNameRequired: "Enter a link name",
     hint: "Drag a row onto another row to make a group. The eye button hides or shows an item; the ⋮ button has more options.",
     addLink: "Add link",
     newLink: "New link",
@@ -299,6 +304,7 @@ const STRINGS = {
     movedGroup: "{name}: בקבוצה {group}, מקום {pos}",
     grouped: "נוצרה קבוצה עם {a} ועם {b}",
     nameRequired: "צריך שם לקבוצה",
+    linkNameRequired: "צריך שם לקישור",
     hint: "גררו שורה אל שורה אחרת כדי ליצור קבוצה. כפתור העין מסתיר או מציג פריט; בכפתור ⋮ יש אפשרויות נוספות.",
     addLink: "הוספת קישור",
     newLink: "קישור חדש",
@@ -387,6 +393,23 @@ function setVar(el, name, value) {
   if (el.style.getPropertyValue(name) === want) return;
   if (want) el.style.setProperty(name, want);
   else el.style.removeProperty(name);
+}
+
+/** Set (or, for null, remove) an attribute only when it changes: a write of the same value is still a mutation (PERF-004). */
+function setAttr(el, name, value) {
+  if (value === null || value === undefined) {
+    if (el.hasAttribute(name)) el.removeAttribute(name);
+  } else if (el.getAttribute(name) !== value) el.setAttribute(name, value);
+}
+
+/** A boolean attribute, written only when it changes. */
+function setFlag(el, name, on) {
+  if (el.hasAttribute(name) !== on) el.toggleAttribute(name, on);
+}
+
+/** Text content, replaced only when it changes (each assignment replaces the text node). */
+function setText(el, text) {
+  if (el.textContent !== text) el.textContent = text;
 }
 
 /** The layout path of one of HA's sidebar rows: its panel path, or "l:<id>" for a link row. */
@@ -517,6 +540,8 @@ class EspGroup extends HTMLElement {
   }
 
   /** look: { text, icon, bg, line, sub, sel, selIcon } CSS colours (null = theme default), header (L.HEADER_STYLES); hideCount drops the folded count (#36). */
+  // Every write is on change only: HA re-renders the sidebar on every state change, and an unchanged
+  // value written again still costs a style / layout pass (PERF-004).
   update(row, lang, iconOnly, rtl, look = null, header = "plain", hideCount = false) {
     setVar(this, "--esp-own-color", look?.text);
     setVar(this, "--esp-own-icon-color", look?.icon);
@@ -525,38 +550,39 @@ class EspGroup extends HTMLElement {
     setVar(this, "--esp-own-sub", look?.sub);
     setVar(this, "--esp-own-sel", look?.sel);
     setVar(this, "--esp-own-sel-icon", look?.selIcon);
-    if (this.getAttribute("header") !== header) this.setAttribute("header", header);
-    this._icon.icon = row.icon || DEFAULT_ICON;
-    this._name.textContent = row.name;
+    setAttr(this, "header", header);
+    const icon = row.icon || DEFAULT_ICON;
+    if (this._icon.icon !== icon) this._icon.icon = icon;
+    setText(this._name, row.name);
     const tabbed = row.tabbed === true;
     const collapsed = !tabbed && row.collapsed;
     const count = row.count === 1 ? t(lang, "items1") : t(lang, "items", { n: row.count });
-    this._count.textContent = collapsed && !hideCount ? String(row.count) : "";
-    this.toggleAttribute("tabbed", tabbed);
-    this.toggleAttribute("collapsed", collapsed);
-    this.toggleAttribute("selected", (tabbed || collapsed) && row.selected);
-    this.toggleAttribute("icon-only", iconOnly);
-    this.toggleAttribute("rtl", rtl);
+    setText(this._count, collapsed && !hideCount ? String(row.count) : "");
+    setFlag(this, "tabbed", tabbed);
+    setFlag(this, "collapsed", collapsed);
+    setFlag(this, "selected", (tabbed || collapsed) && !!row.selected);
+    setFlag(this, "icon-only", !!iconOnly);
+    setFlag(this, "rtl", !!rtl);
     // The badge is drawn here and read as part of the row's name (the visible one is aria-hidden).
     const badge = row.badge ?? null;
     const badgeText = L.badgeText(badge);
-    this._badge.hidden = !badge;
-    this._badge.toggleAttribute("data-dot", !!badge && !badge.count);
-    if (this._badge.textContent !== badgeText) this._badge.textContent = badgeText;
+    setFlag(this._badge, "hidden", !badge);
+    setFlag(this._badge, "data-dot", !!badge && !badge.count);
+    setText(this._badge, badgeText);
     const said = badge ? `, ${badge.count ? badgeText : t(lang, "badgeActive")}` : "";
     // A tabbed group opens a page (a link, current while one of its tabs is open); others fold.
-    this._row.setAttribute("role", tabbed ? "link" : "button");
+    setAttr(this._row, "role", tabbed ? "link" : "button");
     if (tabbed) {
-      this._row.removeAttribute("aria-expanded");
-      this._row.setAttribute("aria-label", `${row.name}${said}`);
-      if (row.selected) this._row.setAttribute("aria-current", "page");
-      else this._row.removeAttribute("aria-current");
+      setAttr(this._row, "aria-expanded", null);
+      setAttr(this._row, "aria-label", `${row.name}${said}`);
+      setAttr(this._row, "aria-current", row.selected ? "page" : null);
     } else {
-      this._row.removeAttribute("aria-current");
-      this._row.setAttribute("aria-expanded", String(!row.collapsed));
-      this._row.setAttribute("aria-label", `${row.name}, ${count}${said}`);
+      setAttr(this._row, "aria-current", null);
+      setAttr(this._row, "aria-expanded", String(!row.collapsed));
+      setAttr(this._row, "aria-label", `${row.name}, ${count}${said}`);
     }
-    this.title = iconOnly ? row.name : "";
+    const title = iconOnly ? row.name : "";
+    if (this.title !== title) this.title = title;
   }
 }
 
@@ -573,7 +599,8 @@ const EDITOR_CSS = `
   --esp-fill-color: var(--primary-color);
   --esp-fill-color: color-mix(in srgb, var(--primary-color) 65%, black);
   --esp-error-color: var(--error-color, #db4437);
-  --esp-error-color: color-mix(in srgb, var(--error-color, #db4437) 75%, var(--primary-text-color, #212121)); }
+  /* 70%: 4.5:1 also on the lighter options panel in dark themes (secondary-background-color), BUG-019. */
+  --esp-error-color: color-mix(in srgb, var(--error-color, #db4437) 70%, var(--primary-text-color, #212121)); }
 .handle, .row .title, .bar-title, .note { user-select: none; -webkit-user-select: none; }
 .bar { position: sticky; top: 0; z-index: 2; background: var(--sidebar-background-color, var(--card-background-color));
   display: flex; flex-direction: column; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--divider-color); }
@@ -697,7 +724,7 @@ button { font: inherit; color: inherit; }
   background: var(--secondary-background-color, rgba(127,127,127,0.06)); }
 .children .row-opts { margin-inline-start: 20px; }
 .row-opts .field input[type="text"], .row-opts .field input:not([type]) { font: inherit; color: inherit; background: var(--card-background-color, transparent);
-  border: 1px solid var(--divider-color); border-radius: 6px; padding: 6px; min-width: 0; }
+  border: 1px solid var(--secondary-text-color); border-radius: 6px; padding: 6px; min-width: 0; }
 .row-opts .field input[aria-invalid="true"] { border-color: var(--esp-error-color); }
 .row-opts .field input:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 1px; }
 .row-opts .note { margin-top: -4px; }
@@ -707,16 +734,34 @@ button { font: inherit; color: inherit; }
 .row.link .title { font-style: italic; }
 `;
 
-/** One labelled text field of the ⋮ options: commits on Enter or when it loses focus; `commit` returns an error text or "". */
-function optField({ label, help = null, value, focusKey, dir = null, list = null, maxlength = null, placeholder = null, commit }) {
+/**
+ * Keep a text field within `max` code points, as the server counts (`maxlength` counts UTF-16 units, so it
+ * allowed 25 emoji where the server takes 50 and could leave half an emoji). The caret stays after the kept text.
+ */
+function limitInput(input, max) {
+  const { value, caret } = L.limitText(input.value, input.selectionStart, max);
+  if (value === input.value) return;
+  input.value = value;
+  input.setSelectionRange?.(caret, caret);
+}
+
+/**
+ * One labelled text field of the ⋮ options: commits on Enter or when it loses focus; `commit` returns an error text or "".
+ * `errors` (focus key -> { row, value, message }) keeps a refused value and its message across re-renders, so Done can
+ * refuse while a field is in error (BUG-021); `row` is the layout key of the row the options belong to.
+ */
+function optField({ label, help = null, value, focusKey, dir = null, list = null, limit = null, placeholder = null, errors = null, row = null, commit }) {
   const errId = `err-${focusKey.replace(/[^A-Za-z0-9_-]/g, "_")}`;
   const helpId = help ? `help-${errId}` : null;
-  const error = h("div", { class: "error", id: errId, role: "alert" });
+  const pending = errors?.get(focusKey);
+  const error = h("div", { class: "error", id: errId, role: "alert" }, pending?.message ?? null);
   const run = (input) => {
     const message = commit(input);
     if (message) input.setAttribute("aria-invalid", "true");
     else input.removeAttribute("aria-invalid");
     error.textContent = message || "";
+    if (message) errors?.set(focusKey, { row, value: input.value, message });
+    else errors?.delete(focusKey);
   };
   return [
     h(
@@ -727,14 +772,15 @@ function optField({ label, help = null, value, focusKey, dir = null, list = null
         type: "text",
         dir,
         list,
-        maxlength,
         placeholder,
         spellcheck: "false",
         autocomplete: "off",
         "aria-describedby": [errId, helpId].filter(Boolean).join(" "),
+        "aria-invalid": pending ? "true" : null,
         "data-focus-key": focusKey,
-        ".value": value ?? "",
+        ".value": pending ? pending.value : value ?? "",
         oninput: (e) => {
+          if (limit) limitInput(e.target, limit);
           e.target.removeAttribute("aria-invalid");
           error.textContent = "";
         },
@@ -795,6 +841,8 @@ class EspEditor extends HTMLElement {
     this.iconEditing = null;
     // Group id -> what the user left in a name field that is not a valid name (shown with its error).
     this.nameErrors = new Map();
+    // ⋮ option fields left in error (focus key -> { row, value, message }); Done refuses while any is.
+    this.optErrors = new Map();
     // The row whose ⋮ options are open (one at a time), and the entity ids its fields suggest.
     this.optionsOpen = null;
     this._entities = h("datalist", { id: "esp-entities" }, (opts.entities ?? []).map((e) => h("option", { value: e })));
@@ -863,7 +911,8 @@ class EspEditor extends HTMLElement {
     const headIcon = iconBtn?.querySelector(".icon");
     if (headIcon) headIcon.icon = node.icon || DEFAULT_ICON;
     label(`[data-focus-key="ungroup:${id}"]`, t(lang, "ungroup", { name: node.name }));
-    label(`[data-focus-key="more:${L.groupKey(id)}"]`, t(lang, "options", { name: node.name }));
+    const more = label(`[data-focus-key="more:${L.groupKey(id)}"]`, `${t(lang, "optMore")}, ${node.name}`);
+    if (more) more.title = t(lang, "options", { name: node.name });
     for (const [key, short, long, on] of [
       ["open", "optOpen", "startOpen", node.start_open === true],
       ["tabbed", "optTabs", "tabbed", node.tabbed === true],
@@ -936,6 +985,7 @@ class EspEditor extends HTMLElement {
     const active = root.activeElement;
     const focusKey = this.focusKey ?? active?.dataset?.focusKey ?? null;
     for (const id of [...this.nameErrors.keys()]) if (!this.tree.some((n) => n.type === "group" && n.id === id)) this.nameErrors.delete(id);
+    for (const [k, { row }] of [...this.optErrors]) if (!L.locate(this.tree, row)) this.optErrors.delete(k);
 
     const bar = h(
       "div",
@@ -1029,12 +1079,12 @@ class EspEditor extends HTMLElement {
     const input = h("input", {
       class: "name-input",
       type: "text",
-      maxlength: String(L.MAX_NAME),
       "aria-label": t(lang, "groupName"),
       "aria-describedby": `name-err-${node.id}`,
       "aria-invalid": pending === undefined ? null : "true",
       "data-focus-key": `name:${node.id}`,
       ".value": pending ?? node.name,
+      oninput: (e) => limitInput(e.target, L.MAX_NAME),
       onchange: (e) => this.actions.rename(node.id, e.target),
       onkeydown: (e) => {
         if (e.key !== "Enter") return;
@@ -1108,7 +1158,8 @@ class EspEditor extends HTMLElement {
           class: "opt more",
           type: "button",
           "aria-expanded": String(this.optionsOpen === key),
-          "aria-label": t(lang, "options", { name: node.name }),
+          "aria-label": `${t(lang, "optMore")}, ${node.name}`,
+          title: t(lang, "options", { name: node.name }),
           "data-focus-key": `more:${key}`,
           onclick: () => this.toggleOptions(key),
         },
@@ -1438,6 +1489,7 @@ class EspEditor extends HTMLElement {
     const ikey = L.itemKey(key);
     const item = this.item(ikey);
     const fk = (field) => `opt:${field}:${key}`;
+    const errors = this.optErrors;
     const parts = [];
     if (path && L.isLink(path)) {
       const id = L.linkId(path);
@@ -1447,7 +1499,9 @@ class EspEditor extends HTMLElement {
           label: t(lang, "linkName"),
           value: link.name,
           focusKey: fk("name"),
-          maxlength: String(L.MAX_NAME),
+          errors,
+          row: key,
+          limit: L.MAX_NAME,
           commit: (input) => this.actions.setLink(id, "name", input.value),
         }),
         optField({
@@ -1455,8 +1509,10 @@ class EspEditor extends HTMLElement {
           help: t(lang, "linkUrlHelp"),
           value: link.url,
           focusKey: fk("url"),
+          errors,
+          row: key,
           dir: "ltr",
-          maxlength: String(L.MAX_URL),
+          limit: L.MAX_URL,
           placeholder: "/config/automation",
           commit: (input) => this.actions.setLink(id, "url", input.value),
         }),
@@ -1464,6 +1520,8 @@ class EspEditor extends HTMLElement {
           label: t(lang, "linkIcon"),
           value: link.icon,
           focusKey: fk("icon"),
+          errors,
+          row: key,
           dir: "ltr",
           placeholder: DEFAULT_LINK_ICON,
           commit: (input) => this.actions.setLink(id, "icon", input.value),
@@ -1505,6 +1563,8 @@ class EspEditor extends HTMLElement {
         help: t(lang, help),
         value: item[field],
         focusKey: fk(field),
+        errors,
+        row: key,
         dir: "ltr",
         list: "esp-entities",
         placeholder: field === "badge" ? "sensor.open_windows" : "binary_sensor.alarm",
@@ -1518,7 +1578,9 @@ class EspEditor extends HTMLElement {
         help: t(lang, "aliasesHelp"),
         value: item.aliases,
         focusKey: fk("aliases"),
-        maxlength: String(L.MAX_ALIASES),
+        errors,
+        row: key,
+        limit: L.MAX_ALIASES,
         commit: (input) => this.actions.setItem(ikey, "aliases", input.value),
       }),
     );
@@ -1558,6 +1620,25 @@ class EspEditor extends HTMLElement {
     }
     this._q(`[data-opts="${CSS.escape(key)}"]`)?.setAttribute("aria-label", t(this.lang, "options", { name: info.title }));
     this._q(`[data-focus-key="${CSS.escape(`opt:remove:${key}`)}"]`)?.setAttribute("aria-label", t(this.lang, "removeLink", { name: info.title }));
+  }
+
+  /** A ⋮ option field shows an error: open that row's options, focus the field and say it again. Returns whether one did. */
+  focusInvalidOption() {
+    for (const [focusKey, { row, message }] of this.optErrors) {
+      if (!L.locate(this.tree, row)) {
+        this.optErrors.delete(focusKey);
+        continue;
+      }
+      this.set({ optionsOpen: row }, focusKey);
+      const input = this._q(`[data-focus-key="${CSS.escape(focusKey)}"]`);
+      const error = input && this._q(`#${CSS.escape(input.getAttribute("aria-describedby").split(" ")[0])}`);
+      if (error) {
+        error.textContent = "";
+        setTimeout(() => (error.textContent = message), 50);
+      }
+      return true;
+    }
+    return false;
   }
 
   /** A link that cannot be saved (no valid address): open its options, focus the address and say why. */
@@ -2048,11 +2129,17 @@ class Controller {
   }
 
   connect() {
+    live.add(this);
     this.connectNative();
     // An internal link is selected by the page's path, which can change inside one panel (dashboard views).
     if (!this.onLocation) {
+      // HA re-renders for the route itself (and fires location-changed twice per click): refresh only when the
+      // selected internal link differs from the one the last render used (PERF-005).
       this.onLocation = () => {
-        if (Object.keys(this.data?.layout?.links ?? {}).length) this.refresh();
+        if (!this.sb.isConnected) return this.disconnect();
+        const links = this.data?.layout?.links;
+        if (!links || !Object.keys(links).length) return;
+        if (L.linkAt(links, location.pathname) !== this.renderedLink) this.refresh();
       };
       window.addEventListener("location-changed", this.onLocation);
       window.addEventListener("popstate", this.onLocation);
@@ -2063,8 +2150,10 @@ class Controller {
       .subscribeMessage((msg) => this.onData(msg), { type: `${DOMAIN}/subscribe` })
       .then(
         (unsub) => {
-          this.unsub = unsub;
           this.subscribing = false;
+          // Disconnected while subscribing: do not keep the subscription.
+          if (!live.has(this)) return unsub();
+          this.unsub = unsub;
         },
         () => {
           this.subscribing = false;
@@ -2082,8 +2171,9 @@ class Controller {
       .subscribeMessage((msg) => this.onNative(msg?.value), { type: "frontend/subscribe_user_data", key: "sidebar" })
       .then(
         (unsub) => {
-          this.nativeUnsub = unsub;
           this.nativeSubscribing = false;
+          if (!live.has(this)) return unsub();
+          this.nativeUnsub = unsub;
         },
         () => {
           this.nativeSubscribing = false;
@@ -2093,6 +2183,7 @@ class Controller {
 
   disconnect() {
     this.clearTabs();
+    live.delete(this);
     if (this.onLocation) {
       window.removeEventListener("location-changed", this.onLocation);
       window.removeEventListener("popstate", this.onLocation);
@@ -2195,7 +2286,7 @@ class Controller {
     const off = L.hiddenByCondition(layout, (e) => L.entityActive(states[e]));
     const visible = (this.visible = [...byPath.keys(), ...L.linkPaths(layout)].filter((p) => !off.has(p)));
     // An internal link whose page is open is the selected row (the longest match), instead of HA's panel.
-    const at = L.linkAt(layout?.links, location.pathname);
+    const at = (this.renderedLink = L.linkAt(layout?.links, location.pathname));
     selected = at && visible.includes(at) ? at : selected;
     this.selected = selected;
     if (this.editing) return [this.editor];
@@ -2552,7 +2643,8 @@ class Controller {
       if (all.nextElementSibling !== edit) menu.insertBefore(all, edit);
       const ids = [...this.groupNames.keys()];
       const action = L.allAction(this.collapsed, ids, this.settings.accordion);
-      all.hidden = this.editing || !this.settings.toggle_all || ids.length < 2 || !action;
+      // Written on change only, like the rows (PERF-004).
+      setFlag(all, "hidden", this.editing || !this.settings.toggle_all || ids.length < 2 || !action);
       if (!all.hidden) {
         const open = action === "collapse";
         const label = t(this.lang, open ? "collapseAll" : "expandAll");
@@ -2562,9 +2654,10 @@ class Controller {
           all.replaceChildren(svg(open ? ICONS.collapseAll : ICONS.expandAll));
         }
       }
-      edit.hidden = this.editing;
-      edit.setAttribute("aria-label", t(this.lang, "edit"));
-      edit.title = t(this.lang, "edit");
+      setFlag(edit, "hidden", !!this.editing);
+      const editLabel = t(this.lang, "edit");
+      setAttr(edit, "aria-label", editLabel);
+      if (edit.title !== editLabel) edit.title = editLabel;
     }
   }
 
@@ -2841,7 +2934,7 @@ class Controller {
     return {
       done: () => {
         const e = ed();
-        if (e.focusInvalidName() || e.focusInvalidLink()) return;
+        if (e.focusInvalidName() || e.focusInvalidOption() || e.focusInvalidLink()) return;
         const kind = L.editKind(this.edit.baseTree, e.tree, this.edit.baseHidden, e.hiddenSet, this.edit.baseSettings, e.settings, this.edit.baseMeta, e.meta);
         if (kind === "none") return this.stopEdit();
         const onDefault = !this.data.own && !!this.data.default;
@@ -2878,7 +2971,7 @@ class Controller {
         if (!link) return "";
         if (field === "name") {
           const name = L.cleanName(value);
-          if (!name) return t(lang(), "nameRequired");
+          if (!name) return t(lang(), "linkNameRequired");
           link.name = name;
         } else if (field === "url") {
           const url = L.normalizeUrl(value, location.origin);
@@ -2997,7 +3090,7 @@ class Controller {
           const settings = L.cleanSettings(this.data.default?.settings);
           await this.writeNative(tree, this.edit.baseHidden);
           e.set(
-            { tree, settings, meta: L.metaOf(this.data.default), optionsOpen: null, hiddenSet: new Set(this.edit.baseHidden), confirming: null, notice: "", error: "", status: t(lang(), "resetDone") },
+            { tree, settings, meta: L.metaOf(this.data.default), optionsOpen: null, optErrors: new Map(), hiddenSet: new Set(this.edit.baseHidden), confirming: null, notice: "", error: "", status: t(lang(), "resetDone") },
             "done",
           );
           rebase();
@@ -3018,7 +3111,7 @@ class Controller {
       },
       setDefault: async () => {
         const e = ed();
-        if (e.focusInvalidName() || e.focusInvalidLink()) return;
+        if (e.focusInvalidName() || e.focusInvalidOption() || e.focusInvalidLink()) return;
         if (!(await this.save(e.tree, e.hiddenSet, false))) return e.set({ confirming: null });
         try {
           await this.hass.callWS({ type: `${DOMAIN}/default/set`, layout: L.toLayout(e.tree, e.settings, e.meta) });
@@ -3129,10 +3222,12 @@ class Controller {
 function controllerFor(sb) {
   let c = ctrls.get(sb);
   if (!c) {
+    // A new sidebar: release the controllers of sidebars that left the page (PERF-006).
+    for (const old of [...live]) if (!old.sb.isConnected) old.disconnect();
     c = new Controller(sb);
     ctrls.set(sb, c);
   }
-  c.connect();
+  if (sb.isConnected) c.connect();
   return c;
 }
 
@@ -3190,6 +3285,10 @@ function patch(cls) {
     origUpdated?.call(this, changed);
     if (this.hass) controllerFor(this).afterUpdate();
   };
+  // These two wrappers do NOT run in the browser: a custom element's lifecycle callbacks are read once, at
+  // define(), and ha-sidebar is defined before this patch (PERF-006). They stay only for callers that invoke
+  // them directly (the node tests). Real cleanup: controllerFor releases controllers of detached sidebars,
+  // and a controller's location listener disconnects it once its sidebar is detached.
   p.connectedCallback = function () {
     origConnected?.call(this);
     if (this.hass) controllerFor(this);
