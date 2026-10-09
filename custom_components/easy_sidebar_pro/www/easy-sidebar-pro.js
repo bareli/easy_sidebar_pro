@@ -575,7 +575,8 @@ const EDITOR_CSS = `
   --esp-fill-color: var(--primary-color);
   --esp-fill-color: color-mix(in srgb, var(--primary-color) 65%, black);
   --esp-error-color: var(--error-color, #db4437);
-  --esp-error-color: color-mix(in srgb, var(--error-color, #db4437) 75%, var(--primary-text-color, #212121)); }
+  /* 70%: 4.5:1 also on the lighter options panel in dark themes (secondary-background-color), BUG-019. */
+  --esp-error-color: color-mix(in srgb, var(--error-color, #db4437) 70%, var(--primary-text-color, #212121)); }
 .handle, .row .title, .bar-title, .note { user-select: none; -webkit-user-select: none; }
 .bar { position: sticky; top: 0; z-index: 2; background: var(--sidebar-background-color, var(--card-background-color));
   display: flex; flex-direction: column; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--divider-color); }

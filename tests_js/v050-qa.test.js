@@ -156,6 +156,22 @@ test("#42 group More / עוד: accessible name starts with the visible label, lo
   assert.ok(!/more:\$\{L\.groupKey\(id\)\}"\]`, t\(lang, "options"/.test(patch));
 });
 
+/* ---- #43 BUG-019: error text 4.5:1 on the options panel in dark and light ---- */
+
+test("#43 the error colour mix reaches 4.5:1 on the options panel and the sidebar in both default themes", () => {
+  const share = Number(SRC.match(/--esp-error-color: color-mix\(in srgb, var\(--error-color, #db4437\) (\d+)%, var\(--primary-text-color, #212121\)\)/)?.[1]) / 100;
+  assert.ok(share > 0 && share < 1);
+  const err = [219, 68, 55];
+  const themes = [
+    { text: [33, 33, 33], bgs: [[229, 229, 229], [255, 255, 255]] }, // light: options panel, sidebar
+    { text: [225, 225, 225], bgs: [[40, 40, 40], [28, 28, 28]] }, // dark: options panel (HA secondary-background-color), sidebar
+  ];
+  for (const { text, bgs } of themes) {
+    const color = L.mix(text, err, share).map(Math.round);
+    for (const bg of bgs) assert.ok(L.contrast(color, bg) >= 4.5, `${color} on ${bg}: ${L.contrast(color, bg).toFixed(2)}`);
+  }
+});
+
 /* ---- #48 SEC-003: scheme matched in ASCII only (parity with layout.py) ---- */
 
 test("#48 httpſ:// and HTTPſ:// are refused, ASCII case variants accepted", () => {
