@@ -62,3 +62,10 @@
   - Seeded instances set the core language to Hebrew, so `qa_user` is Hebrew too. For an English user send, as that user,
     `frontend/set_user_data` key `language` value `{"language": "en", "number_format": "language", "time_format": "language", "date_format": "language", "time_zone": "local", "first_weekday": "language"}` and reload.
   - HA's fixed (bottom) list is 255 px wide in the expanded sidebar (the sidebar's 1 px border): grid cell widths must fit 255, not 256 (v0.3 pinned grid wrapped to 3 columns).
+  - **Agent types (2026-10-09):** a session hook (talk-progress plugin) refuses every tool call of a subagent until it
+    publishes a task list with `mcp__talk-progress__progress`. The restricted `qa-*` agent types have no ToolSearch, so
+    they cannot load that tool and stop at once (all five did). Dispatch them as `general-purpose` agents told to read
+    `~/.claude/agents/qa-<role>.md` and to load the progress tool through ToolSearch first.
+  - Ports used by the v0.5 cycle: 8170 (manager), 8171 engineer, 8172 UX, 8173 a11y, 8174 security, 8175 perf; venv and
+    configs in that session's scratchpad (gone with it). A test venv for pytest needs `home-assistant-frontend` matching
+    the HA version pytest-homeassistant-custom-component pulls (2026.10.0 -> 20260930.2).
