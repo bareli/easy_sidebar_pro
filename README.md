@@ -82,6 +82,8 @@ the same layout to every user who has not made their own.
   - **Show only while this entity is on**: the item (or the whole group) appears only while the entity is on,
     open or above 0, for example an "Alarm" group only while `input_boolean.alarm` is on.
   - **Search words**: other names the search box finds the item by.
+  - **Icon colour** (panels and links): a theme colour or a custom `#rrggbb` for the item's icon. It wins over
+    its group's icon colour; the selected item keeps Home Assistant's own highlight.
   - Entity fields suggest entities as you type their name in any language or their id ("Friendly name
     (entity_id)", up to 8; arrow keys and Enter, or tap); the field keeps the entity id.
   - The editor warns under the field when an entity does not exist in Home Assistant (it still saves).

@@ -692,6 +692,7 @@ button { font: inherit; color: inherit; }
 .btn.danger { background: var(--esp-danger-fill); border-color: var(--esp-danger-fill); color: #fff; }
 .group[data-color] { border-inline-start: 4px solid var(--esp-own-line); }
 .group > .row.head .icon { color: var(--esp-own-icon-color, var(--sidebar-icon-color, var(--secondary-text-color))); }
+.row[data-item-color] > .icon { color: var(--esp-item-color); }
 .sub { color: var(--secondary-text-color); font-size: var(--ha-font-size-s, 12px); font-weight: var(--ha-font-weight-medium, 500); margin-top: 4px; }
 .swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(32px, 1fr)); gap: 2px; }
 .swatch { width: 32px; height: 32px; display: grid; place-items: center; border: none; background: none; border-radius: 50%; cursor: pointer; padding: 0; }
@@ -1432,8 +1433,8 @@ class EspEditor extends HTMLElement {
       h("div", { class: "icon-line" }, preview, input),
       error,
       chips,
-      this.colorPicker(node, "color", "color"),
-      this.colorPicker(node, "icon_color", "iconColor"),
+      this.groupColorPicker(node, "color", "color"),
+      this.groupColorPicker(node, "icon_color", "iconColor"),
     );
   }
 
@@ -1445,13 +1446,19 @@ class EspEditor extends HTMLElement {
     setVar(block, "--esp-own-icon-color", look?.icon);
   }
 
-  /** Swatches (none + theme colours), a native colour input and a `#rrggbb` field for one colour of a group. */
-  colorPicker(node, field, labelKey) {
+  groupColorPicker(node, field, labelKey) {
+    return this.colorPicker({ id: node.id, field, labelKey, value: node[field] ?? null, set: (color) => this.actions.setColor(node.id, field, color) });
+  }
+
+  /**
+   * Swatches (none + theme colours), a native colour input and a `#rrggbb` field for one colour: of a group
+   * (id = group id) or of a row (field "item", id = its layout key). `set(color)` stores it.
+   */
+  colorPicker({ id, field, labelKey, value, set }) {
     const lang = this.lang;
-    const id = node.id;
-    const labelId = `${field}-label-${id}`;
-    const errId = `${field}-err-${id}`;
-    const value = node[field] ?? null;
+    const domId = `${field}-${id}`.replace(/[^A-Za-z0-9_-]/g, "_");
+    const labelId = `label-${domId}`;
+    const errId = `err-${domId}`;
     const swatch = (color) =>
       h(
         "button",
@@ -1464,17 +1471,17 @@ class EspEditor extends HTMLElement {
           "data-swatch": `${field}:${id}`,
           "data-color": color ?? "",
           "data-focus-key": `sw:${field}:${id}:${color ?? "none"}`,
-          onclick: () => this.actions.setColor(id, field, color),
+          onclick: () => set(color),
         },
         h("span", { style: color === null ? null : `--sw: ${L.colorCss(color)}` }),
       );
-    const error = h("div", { class: "error", id: errId, role: "alert" });
+    const error = h("div", { class: "error", id: errId, role: "alert", "data-err": `${field}:${id}` });
     const native = h("input", {
       type: "color",
       "aria-label": `${t(lang, "pickColor")}: ${t(lang, labelKey)}`,
       "data-native": `${field}:${id}`,
       ".value": (value?.startsWith("#") ? value : this.hexOf?.(value)) ?? "#000000",
-      oninput: (e) => this.actions.setColor(id, field, L.normalizeColor(e.target.value) ?? null),
+      oninput: (e) => set(L.normalizeColor(e.target.value) ?? null),
     });
     const apply = (input) => {
       const color = L.normalizeColor(input.value);
@@ -1483,7 +1490,7 @@ class EspEditor extends HTMLElement {
         error.textContent = t(lang, "colorInvalid");
         return;
       }
-      this.actions.setColor(id, field, color);
+      set(color);
     };
     const text = h("input", {
       type: "text",
@@ -1524,21 +1531,39 @@ class EspEditor extends HTMLElement {
     if (!node) return;
     const block = this._q(`[data-block="${CSS.escape(L.groupKey(id))}"]`);
     if (block) this.paintGroup(block, node);
-    for (const field of ["color", "icon_color"]) {
-      const value = node[field] ?? null;
-      for (const sw of this.shadowRoot.querySelectorAll(`[data-swatch="${field}:${id}"]`))
-        sw.setAttribute("aria-pressed", String((sw.dataset.color || null) === value));
-      const text = this._q(`[data-hex="${field}:${id}"]`);
-      if (text) {
-        text.removeAttribute("aria-invalid");
-        if (text.value.trim() !== (value ?? "")) text.value = value ?? "";
-        const error = this._q(`#${field}-err-${id}`);
-        if (error) error.textContent = "";
-      }
-      const native = this._q(`[data-native="${field}:${id}"]`);
-      const hex = value?.startsWith("#") ? value : this.hexOf?.(value);
-      if (native && hex && native.value !== hex) native.value = hex;
+    for (const field of ["color", "icon_color"]) this.syncPicker(field, id, node[field] ?? null);
+  }
+
+  /** One colour picker shows `value`: pressed swatch, text and native fields; a stale error is cleared. */
+  syncPicker(field, id, value) {
+    const attr = CSS.escape(`${field}:${id}`);
+    for (const sw of this.shadowRoot.querySelectorAll(`[data-swatch="${attr}"]`))
+      sw.setAttribute("aria-pressed", String((sw.dataset.color || null) === value));
+    const text = this._q(`[data-hex="${attr}"]`);
+    if (text) {
+      text.removeAttribute("aria-invalid");
+      if (text.value.trim() !== (value ?? "")) text.value = value ?? "";
+      const error = this._q(`[data-err="${attr}"]`);
+      if (error) error.textContent = "";
     }
+    const native = this._q(`[data-native="${attr}"]`);
+    const hex = value?.startsWith("#") ? value : this.hexOf?.(value);
+    if (native && hex && native.value !== hex) native.value = hex;
+  }
+
+  /** A row's icon takes its own colour (v0.6), adjusted for contrast like a group's icon colour. */
+  applyItemColor(row, ikey) {
+    if (!row) return;
+    const color = this.item(ikey).color ?? null;
+    const tone = color ? (this.look?.(null, color)?.member ?? null) : null;
+    row.toggleAttribute("data-item-color", !!tone);
+    setVar(row, "--esp-item-color", tone);
+  }
+
+  /** A row's colour changed in its ⋮ options: update the picker and the row in place. */
+  patchItemColor(ikey) {
+    this.syncPicker("item", ikey, this.item(ikey).color ?? null);
+    this.applyItemColor(this._q(`.row[data-key="${CSS.escape(L.panelKey(ikey))}"]`), ikey);
   }
 
   /** The pinned area: a drop zone like a group, without handle, name or ungroup. Always last. */
@@ -1663,6 +1688,7 @@ class EspEditor extends HTMLElement {
       ),
     );
     this.applyRule(row, L.itemKey(key));
+    this.applyItemColor(row, L.itemKey(key));
     return this.optionsOpen === key ? [row, this.optionsPanel(key)] : row;
   }
 
@@ -1778,6 +1804,10 @@ class EspEditor extends HTMLElement {
         ),
       );
     }
+    if (path)
+      parts.push(
+        this.colorPicker({ id: ikey, field: "item", labelKey: "iconColor", value: item.color ?? null, set: (color) => this.actions.setItemColor(ikey, color) }),
+      );
     const entity = (field, label, help) =>
       optField({
         label: t(lang, label),
@@ -2289,8 +2319,8 @@ const SIDEBAR_CSS = `
   width: var(--esp-group-divider-width, 2px); background: var(--esp-own-line, var(--esp-group-divider-color, var(--divider-color))); pointer-events: none; }
 :host([expanded]) ha-list-item-button[data-esp-last]::after { inset-block-end: 6px; border-end-end-radius: 1px; border-end-start-radius: 1px; }
 :host([data-esp-divider="none"]) ha-list-item-button[data-esp-group]::after { display: none; }
-ha-list-item-button[data-esp-group]:not(.selected) ha-icon[slot="start"],
-ha-list-item-button[data-esp-group]:not(.selected) ha-svg-icon[slot="start"] { color: var(--esp-own-icon-color, var(--sidebar-icon-color)); }
+ha-list-item-button:is([data-esp-group], [data-esp-color]):not(.selected) ha-icon[slot="start"],
+ha-list-item-button:is([data-esp-group], [data-esp-color]):not(.selected) ha-svg-icon[slot="start"] { color: var(--esp-own-icon-color, var(--sidebar-icon-color)); }
 /* Four icons per row: 4 x (cell + 8 px margins) stays inside the list, which is 1 px narrower than the sidebar (its border). */
 :host([expanded]) ha-list-item-button[data-esp-pin] { width: calc((var(--ha-sidebar-expanded-item-width, 248px) - 28px) / 4); --ha-row-item-padding-inline: 15px; }
 :host([narrow][expanded]) ha-list-item-button[data-esp-pin] { width: calc((240px - var(--safe-area-inset-left, 0px) - 28px) / 4); --ha-row-item-padding-inline: 14px; }
@@ -2587,6 +2617,9 @@ class Controller {
     // Folding (accordion, collapse all) is about the groups that fold: a tabbed group is a single row.
     this.groupNames = new Map(rows.filter((r) => r.type === "group" && !r.tabbed).map((r) => [r.id, r.name]));
     this.groupLooks = new Map(rows.filter((r) => r.type === "group").map((r) => [r.id, this.look(r.color, r.icon_color, this.settings.header)]));
+    // A row's own icon colour (v0.6) wins over its group's icon colour.
+    this.itemTones = new Map();
+    for (const p of visible) if (items[p]?.color) this.itemTones.set(p, this.look(null, items[p].color)?.member ?? null);
     this.lastInGroup = new Set(rows.filter((r) => r.type === "panel" && r.last).map((r) => r.path));
     // HA sets the page direction on <html dir>; reading it avoids a style recalculation per render.
     const dir = document.documentElement.dir;
@@ -2874,7 +2907,7 @@ class Controller {
       }
       const look = group ? this.groupLooks.get(group) : null;
       setVar(item, "--esp-own-line", look?.line);
-      setVar(item, "--esp-own-icon-color", look?.member);
+      this.tintRow(item, path, look?.member);
       const last = !!group && this.lastInGroup.has(path);
       if (item.hasAttribute("data-esp-last") !== last) item.toggleAttribute("data-esp-last", last);
     }
@@ -2967,6 +3000,13 @@ class Controller {
   }
 
   /** Pinned rows in HA's fixed list: mark them (grid cell size), name them, place their tooltips, keys. */
+  /** A row's own icon colour (v0.6) wins over its group's icon colour (`member`); written on change only. */
+  tintRow(item, path, member) {
+    const tone = this.editing ? null : (this.itemTones?.get(path) ?? null);
+    if (item.hasAttribute("data-esp-color") !== !!tone) item.toggleAttribute("data-esp-color", !!tone);
+    setVar(item, "--esp-own-icon-color", tone ?? member);
+  }
+
   afterPins(root) {
     const nav = root.querySelector("ha-list-nav.after-spacer");
     if (!nav) return;
@@ -2984,7 +3024,9 @@ class Controller {
       if (desc.textContent !== text) desc.textContent = text;
     }
     for (const item of nav.querySelectorAll('ha-list-item-button[id^="sidebar-panel-"]')) {
-      const pin = pins.has(rowPath(item));
+      const path = rowPath(item);
+      const pin = pins.has(path);
+      this.tintRow(item, path, null);
       if (item.hasAttribute("data-esp-pin") !== pin) item.toggleAttribute("data-esp-pin", pin);
       if (pin && item.getAttribute("aria-describedby") !== descId) item.setAttribute("aria-describedby", descId);
     }
@@ -3306,6 +3348,16 @@ class Controller {
         else delete e.meta.items[ikey];
         e.patchRule(ikey);
         return "";
+      },
+      /** A row's own icon colour (null = none). */
+      setItemColor: (ikey, color) => {
+        if (!L.validColor(color) || ikey.startsWith(L.GROUP_PREFIX)) return;
+        const e = ed();
+        const next = { ...e.item(ikey), color };
+        if (color === null) delete next.color;
+        if (L.cleanItem(next, ikey)) e.meta.items[ikey] = next;
+        else delete e.meta.items[ikey];
+        e.patchItemColor(ikey);
       },
       rename: (id, input) => {
         const e = ed();
