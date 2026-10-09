@@ -102,6 +102,15 @@ test("#58 the add buttons draw the short label and carry the full one as title a
   assert.match(SRC, /const long = short === full \? null : full;\n\s+return h\("button", \{ class: "add", type: "button", "data-focus-key": focusKey, "aria-label": long, title: long, onclick: run \}, svg\(icon\), short\);/);
 });
 
+/* ---- #62 UX-020: the hint says where the search box is ---- */
+
+test("#62 the editor hint ends with where to turn on the search box", () => {
+  assert.match(EN, /\n {4}hint: "[^"]*The search box is under Display options\.",/);
+  assert.match(HE, /\n {4}hint: "[^"]*תיבת חיפוש נמצאת באפשרויות תצוגה\.",/);
+  // Search stays off by default.
+  assert.equal(L.DEFAULT_SETTINGS.search, false);
+});
+
 test("#60 the English address error names http or https", () => {
   assert.match(EN, /\n {4}linkUrlInvalid: "Enter a Home Assistant page \(starting with \/\) or a web address \(http or https\)",/);
 });

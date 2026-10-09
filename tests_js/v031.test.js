@@ -32,6 +32,6 @@ test("#37 group header rows take HA's item width: 248 px expanded, 240 px in the
 });
 
 test("editor hint names the eye button (hide / show), both languages", () => {
-  assert.match(SRC, /hint: "Drag a row onto another row to make a group\. The eye button hides or shows an item; the ⋮ button has more options\.",/);
-  assert.match(SRC, /hint: "גררו שורה אל שורה אחרת כדי ליצור קבוצה\. כפתור העין מסתיר או מציג פריט; בכפתור ⋮ יש אפשרויות נוספות\.",/);
+  assert.match(SRC, /hint: "Drag a row onto another row to make a group\. The eye button hides or shows an item; the ⋮ button has more options\./);
+  assert.match(SRC, /hint: "גררו שורה אל שורה אחרת כדי ליצור קבוצה\. כפתור העין מסתיר או מציג פריט; בכפתור ⋮ יש אפשרויות נוספות\./);
 });
