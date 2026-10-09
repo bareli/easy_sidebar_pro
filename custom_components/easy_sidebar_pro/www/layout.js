@@ -122,19 +122,35 @@ export function validUrl(value) {
 }
 export const isExternal = (url) => /^https?:\/\//i.test(url ?? "");
 
+// A host name at the start of typed text, with an optional port ("nas.local:5000", "example.com/x").
+const HOST_START = /^([a-z0-9-]+(?:\.[a-z0-9-]+)*)(:\d{1,5})?(?=[/?#]|$)/i;
+const IPV4 = /^\d{1,3}(?:\.\d{1,3}){3}$/;
+// Home network names: plain http (a NAS or a router on the LAN has no certificate for https).
+const LOCAL_SUFFIX = /\.(?:local|lan|home|internal|home\.arpa)$/i;
+// "tel:12345" looks like a one-word host with a port; these are schemes, never hosts.
+const NOT_HOSTS = new Set(["tel", "sms", "mailto", "fax", "callto", "sip", "sips", "geo", "urn", "news", "javascript", "vbscript", "data", "file", "blob", "about", "ftp", "ws", "wss", "http", "https"]);
+
+/** Whether a host typed without a scheme is on the home network (UX-013): IPv4, localhost, a one-word name, a LAN suffix, or any host with a port. */
+export const localHost = (host, port = false) =>
+  !!port || IPV4.test(host) || !host.includes(".") || host.toLowerCase() === "localhost" || LOCAL_SUFFIX.test(host);
+
 /**
  * What a user typed as an address, normalised: trimmed; "config/automation" -> "/config/automation";
- * "example.com" -> "https://example.com"; a full address of this Home Assistant -> its path.
- * Returns null when it is not a usable address.
+ * a home network host ("192.168.1.251:5000", "nas.local", "localhost:8123") -> "http://..."; another host name
+ * ("example.com") -> "https://..."; a bare word without a dot or a port ("nas") stays a page of this Home Assistant
+ * ("/nas"); a full address of this Home Assistant -> its path. Returns null when it is not a usable address.
  */
-const HOST_PORT = /^(?:localhost|[a-z0-9-]+(?:\.[a-z0-9-]+)+):\d{1,5}(?:[/?#]|$)/i;
 export function normalizeUrl(value, origin = null) {
   let text = stripSurrogates(String(value ?? "")).trim();
   if (!text) return null;
   if (origin && text.toLowerCase().startsWith(origin.toLowerCase())) text = text.slice(origin.length) || "/";
-  // "nas.local:5000", "localhost:8123/x": a host with a port, not a scheme (a scheme may contain dots).
-  if (HOST_PORT.test(text)) text = `https://${text}`;
-  else if (!text.startsWith("/") && !/^[a-z][a-z0-9+.-]*:/i.test(text)) text = /^[^/\s]+\.[a-z]{2,}(?:[:/?#]|$)/i.test(text) || /^\d+\.\d+\.\d+\.\d+/.test(text) ? `https://${text}` : `/${text}`;
+  const host = text.startsWith("/") ? null : HOST_START.exec(text);
+  if (host && !(host[2] && NOT_HOSTS.has(host[1].toLowerCase()))) {
+    const [, name, port] = host;
+    const isHost = !!port || name.toLowerCase() === "localhost" || IPV4.test(name) || /\.[a-z]{2,}$/i.test(name);
+    if (isHost) text = `${localHost(name, port) ? "http" : "https"}://${text}`;
+    else text = `/${text}`;
+  } else if (!text.startsWith("/") && !/^[a-z][a-z0-9+.-]*:/i.test(text)) text = `/${text}`;
   return validUrl(text) ? text : null;
 }
 
@@ -160,6 +176,12 @@ export function linkAt(links, pathname) {
 
 const ENTITY_RE = /^[a-z0-9_]{1,64}\.[a-z0-9_]{1,255}$/;
 export const validEntity = (value) => typeof value === "string" && ENTITY_RE.test(value);
+
+/** A typed entity id that is well formed but not one of Home Assistant's states (a warning, not an error: UX-010). */
+export function unknownEntity(value, states) {
+  const id = String(value ?? "").trim().toLowerCase();
+  return validEntity(id) && !Object.prototype.hasOwnProperty.call(states ?? {}, id);
+}
 
 /** Search words as stored: control characters dropped, spaces collapsed, at most MAX_ALIASES characters (code points). */
 export function cleanAliases(value) {
@@ -232,6 +254,17 @@ export function hiddenByCondition(layout, active) {
     else out.add(key);
   }
   return out;
+}
+
+/**
+ * The rules on one entry, for the editor's marker (UX-011): its badge and show-only-when entities, and whether
+ * the condition hides the entry right now (`active(entityId)`). null when the entry has neither.
+ */
+export function ruleOf(item, active) {
+  const badge = validEntity(item?.badge) ? item.badge : null;
+  const showWhen = validEntity(item?.show_when) ? item.show_when : null;
+  if (!badge && !showWhen) return null;
+  return { badge, showWhen, hiddenNow: !!showWhen && !active(showWhen) };
 }
 
 /** Entity ids a layout's badges and conditions read (the sidebar re-renders when one of them changes). */
@@ -367,7 +400,18 @@ export function tabsFor(layout, visible, selected) {
 }
 
 /** Where a click on a tabbed row goes: the tab last open in this page when still shown, else the first. */
-export const tabTarget = (paths, last) => (last && paths.includes(last) ? last : paths[0] ?? null);
+/**
+ * Which ends of a sideways-scrolling tab list hide more tabs (UX-014), from its scroll position. `scrollLeft` is
+ * 0 at the start and negative toward the end in RTL, so its distance from 0 is the offset from the start.
+ */
+export function fadeEdges(scrollLeft, scrollWidth, clientWidth) {
+  const max = scrollWidth - clientWidth;
+  if (!(max > 1)) return { start: false, end: false };
+  const pos = Math.abs(scrollLeft);
+  return { start: pos > 1, end: pos < max - 1 };
+}
+
+export const tabTarget =(paths, last) => (last && paths.includes(last) ? last : paths[0] ?? null);
 
 /** Text as the search compares it: case and accents (Latin diacritics, Hebrew points) ignored. */
 export const searchText = (value) =>
@@ -377,6 +421,37 @@ export const searchText = (value) =>
     .toLocaleLowerCase();
 
 export const MAX_VIEW_RESULTS = 8;
+export const MAX_ENTITY_SUGGESTIONS = 8;
+
+/**
+ * Home Assistant's entities for the editor's suggestions (UX-012): id and friendly name, each also in the form the
+ * search compares (case and accents ignored), sorted by what is shown.
+ */
+export function entityList(states) {
+  return Object.entries(states ?? {})
+    .map(([id, s]) => {
+      const name = typeof s?.attributes?.friendly_name === "string" ? s.attributes.friendly_name.trim() : "";
+      return { id, name, key: searchText(name), idKey: searchText(id) };
+    })
+    .sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id) || a.id.localeCompare(b.id));
+}
+
+/**
+ * Suggestions for what was typed: entities whose friendly name (any language) or id contains it; those whose name,
+ * a word of the name, the id or the id's object part starts with it come first. At most `max`.
+ */
+export function matchEntities(list, query, max = MAX_ENTITY_SUGGESTIONS) {
+  const q = searchText(query).trim();
+  if (!q) return [];
+  const first = [];
+  const rest = [];
+  for (const e of list) {
+    if (e.key.startsWith(q) || ` ${e.key}`.includes(` ${q}`) || e.idKey.startsWith(q) || e.idKey.includes(`.${q}`)) first.push(e);
+    else if (rest.length < max && (e.key.includes(q) || e.idKey.includes(q))) rest.push(e);
+    if (first.length >= max) break;
+  }
+  return [...first, ...rest].slice(0, max);
+}
 
 /**
  * Rows for the sidebar search: entries whose words contain `query`. `titles`: path -> the shown name or a

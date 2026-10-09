@@ -62,13 +62,18 @@ the same layout to every user who has not made their own.
   Clicking it opens the group's first item (or the one last open in this page) with a bar of tabs above the
   page, one per item of the group. The pages are Home Assistant's own, unchanged; the group's row is
   highlighted while any of them is open. A dashboard with several views keeps its own view tabs below the
-  bar. Hidden items are not tabs. On phones (narrow screens) the tabs are a bar at the bottom of the screen.
+  bar. Hidden items are not tabs. On phones (narrow screens) the tabs are a bar at the bottom of the screen,
+  with a coloured top edge and the group's icon so it is not mistaken for a page's own tabs. When more tabs
+  scroll sideways, the bar fades at that edge.
   The bar and the page's header stay in place while you scroll a long page.
 - **Links**: **Add link** in the editor adds an item that is not a Home Assistant panel: a page of Home Assistant
   (`/config/automation`, `/lovelace/cameras`, `/config/integrations`...) or a web address (your router, NAS,
   `https://...`). Give it a name and an icon; it can be grouped, pinned and be a tab like any other item. Web
   addresses open in a new browser tab; a Home Assistant page can too (an option). A link to a page is
-  highlighted while that page is open.
+  highlighted while that page is open. Typed without `http://` or `https://`, a home network address
+  (`192.168.1.251:5000`, `nas.local`, `router.lan`, `localhost`, any address with a port) gets `http://`, other
+  web names (`example.com`) get `https://`, and a single word (`energy`) is a Home Assistant page (`/energy`); the
+  field shows the result.
 - **More options per item** (the ⋮ button on each row in the editor, and **More** on a group):
   - **Move to**: put the item into a group, back to the top level or into the pinned area, without dragging.
   - **Badge**: an entity whose number shows on the item, like Home Assistant's update count on Settings (for
@@ -77,6 +82,11 @@ the same layout to every user who has not made their own.
   - **Show only while this entity is on**: the item (or the whole group) appears only while the entity is on,
     open or above 0, for example an "Alarm" group only while `input_boolean.alarm` is on.
   - **Search words**: other names the search box finds the item by.
+  - Entity fields suggest entities as you type their name in any language or their id ("Friendly name
+    (entity_id)", up to 8; arrow keys and Enter, or tap); the field keeps the entity id.
+  - The editor warns under the field when an entity does not exist in Home Assistant (it still saves).
+  - In the editor a small lightning mark shows which rows have a badge or a show-only-when rule (its tooltip names
+    the entities); a row its rule hides right now is dimmed ("Hidden now: ... is off").
 - **Search box** (editor, **Display options**, off by default): type part of a name at the top of the sidebar to
   see only the items whose names contain it (any case), with their groups unfolded. It also finds Home
   Assistant's own English names of built-in panels (type "his" for History in any language), links by name or

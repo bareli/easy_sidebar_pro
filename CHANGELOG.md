@@ -7,6 +7,18 @@
 - **Search** also finds Home Assistant's English names of built-in panels in any language ("his" finds History in Hebrew), links by name or address, search words, and dashboard views ("View · Dashboard").
 - **Tabs on phones**: on narrow screens the tabs of a tabs group are a bar at the bottom of the screen.
 - Tabs groups: on long pages the tab bar and the page header scrolled away with the page. They now stay in place.
+- Link addresses typed without a scheme: home network addresses (IP, `nas.local`, `router.lan`, any address with a port) get `http://`, other web names `https://`; a single word is a Home Assistant page.
+- Clearer Hebrew wording in the editor (badge field, address error, Undo, "אפשרויות נוספות", one consistent register); the address error now says http or https.
+- Hebrew editor: the add buttons read "קבוצה" and "קישור" on one line; the full text is their tooltip and accessible name.
+- Phone tab bar: a coloured top edge and the group's icon set it apart from a page's own bottom tabs; the tab list fades at the edge(s) where more tabs scroll in.
+- Entity fields suggest entities by friendly name (any language, accents ignored) or id, shown as "Name (entity_id)"; arrow keys, Enter and Escape work.
+- Editor: rows with a badge or show-only-when rule carry a small mark; a row its rule hides right now is dimmed and says why.
+- Badge and show-only-when fields warn when the entity does not exist in Home Assistant (saving stays allowed).
+- Icon-only sidebar: groups show Home Assistant's own tooltip with their full name, like the other items.
+- A link's icon field has tappable suggested icons, like a group's, plus router, NAS, web, robot, cog and link icons.
+- Editor on phones: the hint folds behind a **?** button, and the drag handle, eye and ⋮ buttons are 44 px tap targets.
+- The editor hint says where to turn on the search box (Display options; search stays off by default).
+- Badges have a darker fill than Home Assistant's own, so the white number (5.4:1) and the dot are readable on light and dark sidebars.
 
 ## v0.4.2 (2026-10-08)
 

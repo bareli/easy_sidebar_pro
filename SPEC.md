@@ -225,8 +225,9 @@ edited in the in-sidebar editor, validated by `layout.py` and mirrored in `layou
 - `links: { id: { name, icon, url, new_tab } }` (id `[a-z0-9]{1,16}`, at most 50). A link is placed like a panel
   whose path is `l:<id>` (order, a group's `panels`, `grid`); every link must be placed exactly once.
 - `url`: `/path` of this HA (not `//`, no `\`) or `http(s)://host...`; no spaces, control or format characters;
-  at most 2000. Typed input is normalised (`config/x` -> `/config/x`, `example.com` -> `https://example.com`,
-  this HA's own origin stripped). Web addresses always open in a new tab; `new_tab` does it for an HA page.
+  at most 2000. Typed input is normalised (`config/x` -> `/config/x`, `nas` -> `/nas`, `example.com` ->
+  `https://example.com`; home network hosts get `http://`: IPv4, `localhost`, `*.local|lan|home|internal|home.arpa`,
+  one-word hosts and any host with a port (UX-013); this HA's own origin stripped). Web addresses always open in a new tab; `new_tab` does it for an HA page.
 - Drawn with HA's own `_renderPanel` for a stand-in path `esp-link-<id>`; `afterUpdate` sets the row's `href`,
   `target`, `rel` (Lit keeps them: its committed stand-in value does not change). Selected: the internal link
   with the longest path match of `location.pathname` (re-rendered on `location-changed` / `popstate`).

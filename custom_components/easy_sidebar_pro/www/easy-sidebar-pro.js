@@ -31,6 +31,7 @@ const ICONS = {
   more: "M12,16A2,2 0 0,1 14,18A2,2 0 0,1 12,20A2,2 0 0,1 10,18A2,2 0 0,1 12,16M12,10A2,2 0 0,1 14,12A2,2 0 0,1 12,14A2,2 0 0,1 10,12A2,2 0 0,1 12,10M12,4A2,2 0 0,1 14,6A2,2 0 0,1 12,8A2,2 0 0,1 10,6A2,2 0 0,1 12,4Z",
   link: "M10.59,13.41C11,13.8 11,14.44 10.59,14.83C10.2,15.22 9.56,15.22 9.17,14.83C7.22,12.88 7.22,9.71 9.17,7.76V7.76L12.71,4.22C14.66,2.27 17.83,2.27 19.78,4.22C21.73,6.17 21.73,9.34 19.78,11.29L18.29,12.78C18.3,11.96 18.17,11.14 17.89,10.36L18.36,9.88C19.54,8.71 19.54,6.81 18.36,5.64C17.19,4.46 15.29,4.46 14.12,5.64L10.59,9.17C9.41,10.34 9.41,12.24 10.59,13.41M13.41,9.17C13.8,8.78 14.44,8.78 14.83,9.17C16.78,11.12 16.78,14.29 14.83,16.24V16.24L11.29,19.78C9.34,21.73 6.17,21.73 4.22,19.78C2.27,17.83 2.27,14.66 4.22,12.71L5.71,11.22C5.7,12.04 5.83,12.86 6.11,13.65L5.64,14.12C4.46,15.29 4.46,17.19 5.64,18.36C6.81,19.54 8.71,19.54 9.88,18.36L13.41,14.83C14.59,13.66 14.59,11.76 13.41,10.59C13,10.2 13,9.56 13.41,9.17Z",
   delete: "M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z",
+  rule: "M11,15H6L13,1V9H18L11,23V15Z",
 };
 const DEFAULT_LINK_ICON = "mdi:link-variant";
 // A link row is HA's own panel row with this stand-in path (its id is "sidebar-panel-<LINK_ROW><id>"); its
@@ -69,6 +70,8 @@ const SUGGESTED_ICONS = [
   "mdi:shield-home", "mdi:camera", "mdi:chart-line", "mdi:calendar-month", "mdi:tools", "mdi:cog",
   "mdi:star", "mdi:account-group", "mdi:car", "mdi:flower", "mdi:television", "mdi:teddy-bear", "mdi:lightbulb-on", "mdi:water",
 ];
+// A link's suggested icons (UX-017): link-type icons first, then the groups' suggestions.
+const LINK_ICONS = [...new Set(["mdi:link-variant", "mdi:web", "mdi:router-wireless", "mdi:nas", "mdi:robot", "mdi:cog", ...SUGGESTED_ICONS])];
 const LIST_KEYS = new Set(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Home", "End", "PageUp", "PageDown", "Enter", " "]);
 
 const STRINGS = {
@@ -78,6 +81,7 @@ const STRINGS = {
     done: "Done",
     cancel: "Cancel",
     addGroup: "Add group",
+    addGroupShort: "Add group",
     newGroup: "New group",
     groupName: "Group name",
     inGroup: "in group {name}",
@@ -175,8 +179,10 @@ const STRINGS = {
     grouped: "Group created with {a} and {b}",
     nameRequired: "Enter a group name",
     linkNameRequired: "Enter a link name",
-    hint: "Drag a row onto another row to make a group. The eye button hides or shows an item; the ⋮ button has more options.",
+    hintToggle: "Help: how to edit the sidebar",
+    hint: "Drag a row onto another row to make a group. The eye button hides or shows an item; the ⋮ button has more options. The search box is under Display options.",
     addLink: "Add link",
+    addLinkShort: "Add link",
     newLink: "New link",
     options: "More options for {name}",
     optMore: "More",
@@ -185,7 +191,7 @@ const STRINGS = {
     linkName: "Link name",
     linkUrl: "Address",
     linkUrlHelp: "A page of Home Assistant, for example /config/automation, or a web address, for example https://example.com",
-    linkUrlInvalid: "Enter a path starting with / or a web address starting with https://",
+    linkUrlInvalid: "Enter a Home Assistant page (starting with /) or a web address (http or https)",
     linkNewTab: "Open in a new browser tab",
     linkNewTabHelp: "Web addresses always open in a new tab.",
     linkIcon: "Link icon, for example mdi:link-variant",
@@ -196,10 +202,14 @@ const STRINGS = {
     badgeHelp: "Shows the entity's number, or a dot while it is on, open or active. A folded group adds up its items' badges.",
     showWhen: "Show only while this entity is on",
     showWhenHelp: "Empty: always shown. Off, closed, 0, unavailable: hidden.",
+    entityMissing: "This entity does not exist in Home Assistant.",
     entityInvalid: "Use an entity id, for example binary_sensor.front_door",
     aliases: "Search words",
     aliasesHelp: "Other names the search box finds this by, for example its English name.",
     badgeActive: "active",
+    ruleBadge: "Badge: {entity}",
+    ruleShowWhen: "Shown only while {entity} is on",
+    hiddenNow: "Hidden now: {entity} is off",
     viewOf: "{view} · {dash}",
   },
   he: {
@@ -208,18 +218,19 @@ const STRINGS = {
     done: "סיום",
     cancel: "ביטול",
     addGroup: "הוספת קבוצה",
+    addGroupShort: "קבוצה",
     newGroup: "קבוצה חדשה",
     groupName: "שם הקבוצה",
     inGroup: "בקבוצה {name}",
     groupIcon: "הסמל והצבע של {name}",
     iconHelp: "סמל, למשל mdi:home",
-    iconInvalid: "יש לכתוב בצורה mdi:name",
+    iconInvalid: "כתבו בצורה mdi:name",
     color: "צבע",
     iconColor: "צבע הסמל",
     noColor: "ללא צבע",
     customColor: "צבע מותאם, למשל #4caf50",
     pickColor: "בחירת צבע",
-    colorInvalid: "יש לכתוב בצורה #rrggbb",
+    colorInvalid: "כתבו בצורה #rrggbb",
     c_primary: "צבע ערכת הנושא",
     c_accent: "צבע הדגשה",
     c_red: "אדום",
@@ -284,7 +295,7 @@ const STRINGS = {
     resetPlainAsk: "להסיר את כל הקבוצות ולחזור לסדר של Home Assistant? פריטים מוסתרים יישארו מוסתרים.",
     resetPlainOk: "הסרה",
     forkedByHa: "הסדר החדש נשמר כפריסה שלכם. היא כבר לא עוקבת אחרי פריסת ברירת המחדל.",
-    undo: "ביטול",
+    undo: "בטל שינוי",
     forEveryone: "לכל המשתמשים",
     setDefault: "קביעה כברירת מחדל לכולם",
     setDefaultAsk: "הפעולה תחליף את סרגל הצד של כל משתמש שלא שינה את שלו.",
@@ -303,33 +314,39 @@ const STRINGS = {
     movedTop: "{name}: מקום {pos}",
     movedGroup: "{name}: בקבוצה {group}, מקום {pos}",
     grouped: "נוצרה קבוצה עם {a} ועם {b}",
-    nameRequired: "צריך שם לקבוצה",
-    linkNameRequired: "צריך שם לקישור",
-    hint: "גררו שורה אל שורה אחרת כדי ליצור קבוצה. כפתור העין מסתיר או מציג פריט; בכפתור ⋮ יש אפשרויות נוספות.",
+    nameRequired: "הזינו שם לקבוצה",
+    linkNameRequired: "הזינו שם לקישור",
+    hintToggle: "עזרה: איך עורכים את סרגל הצד",
+    hint: "גררו שורה אל שורה אחרת כדי ליצור קבוצה. כפתור העין מסתיר או מציג פריט; בכפתור ⋮ יש אפשרויות נוספות. תיבת חיפוש נמצאת באפשרויות תצוגה.",
     addLink: "הוספת קישור",
+    addLinkShort: "קישור",
     newLink: "קישור חדש",
     options: "אפשרויות נוספות עבור {name}",
-    optMore: "עוד",
+    optMore: "אפשרויות נוספות",
     moveTo: "העברה אל",
     moveTop: "הרמה העליונה (בלי קבוצה)",
     linkName: "שם הקישור",
     linkUrl: "כתובת",
     linkUrlHelp: "דף של Home Assistant, למשל ‎/config/automation, או כתובת אינטרנט, למשל https://example.com",
-    linkUrlInvalid: "יש להזין נתיב שמתחיל ב-/ או כתובת אינטרנט שמתחילה ב-https://",
+    linkUrlInvalid: "הזינו כתובת של דף ב-Home Assistant (מתחילה ב-/) או כתובת אינטרנט (http או https)",
     linkNewTab: "פתיחה בכרטיסייה חדשה בדפדפן",
     linkNewTabHelp: "כתובות אינטרנט נפתחות תמיד בכרטיסייה חדשה.",
     linkIcon: "סמל הקישור, למשל mdi:link-variant",
     optRemove: "מחיקת הקישור",
     removeLink: "מחיקת הקישור {name}",
     removed: "{name} נמחק",
-    badge: "ישות לתג",
+    badge: "מספר על הפריט (ישות)",
     badgeHelp: "מציג את המספר של הישות, או נקודה כשהיא פעילה, פתוחה או דלוקה. קבוצה מקופלת מסכמת את התגים של הפריטים שבה.",
     showWhen: "הצגה רק כשהישות הזו פעילה",
     showWhenHelp: "ריק: מוצג תמיד. כבוי, סגור, 0 או לא זמין: מוסתר.",
-    entityInvalid: "יש להזין מזהה ישות, למשל binary_sensor.front_door",
+    entityMissing: "הישות הזו לא קיימת ב-Home Assistant.",
+    entityInvalid: "הזינו מזהה ישות, למשל binary_sensor.front_door",
     aliases: "מילות חיפוש",
     aliasesHelp: "שמות נוספים שתיבת החיפוש תמצא לפיהם, למשל השם באנגלית.",
     badgeActive: "פעיל",
+    ruleBadge: "מספר על הפריט: {entity}",
+    ruleShowWhen: "מוצג רק כש-{entity} פעיל",
+    hiddenNow: "מוסתר כעת: {entity} כבוי",
     viewOf: "{view} · {dash}",
   },
 };
@@ -493,10 +510,11 @@ const GROUP_CSS = `
 :host([tabbed]) .count, :host([tabbed]) .chev { display: none; }
 :host([tabbed][selected]) .row { box-shadow: inset 0 0 0 100vmax rgba(var(--rgb-primary-color, 3,169,244), 0.12); }
 @media (prefers-reduced-motion: reduce) { .chev { transition: none; } }
-/* Badge (v0.5): HA's own sidebar badge look; a dot for an active state without a number. */
+/* Badge (v0.5): HA's own sidebar badge shape; a dot for an active state without a number. The fill is the accent
+   colour mixed 60% with black: white text 5.4:1 and the dot 5.4:1 (light) / 3.1:1 (dark sidebar) with HA's orange (BUG-016). */
 .row { position: relative; }
 .badge { flex: none; display: flex; align-items: center; justify-content: center; box-sizing: border-box; min-width: 20px; height: 20px; padding: 0 6px;
-  border-radius: 10px; background-color: var(--accent-color); color: var(--text-accent-color, var(--text-primary-color));
+  border-radius: 10px; background-color: var(--accent-color); background-color: color-mix(in srgb, var(--accent-color) 60%, black); color: #fff;
   font-size: var(--ha-font-size-s, 12px); font-weight: normal; font-variant-numeric: tabular-nums; line-height: 1; }
 .badge[data-dot] { min-width: 0; width: 10px; height: 10px; padding: 0; border-radius: 50%; }
 .badge[hidden] { display: none; }
@@ -581,7 +599,8 @@ class EspGroup extends HTMLElement {
       setAttr(this._row, "aria-expanded", String(!row.collapsed));
       setAttr(this._row, "aria-label", `${row.name}, ${count}${said}`);
     }
-    const title = iconOnly ? row.name : "";
+    // The rail's full-name tooltip: HA's ha-tooltip beside the row when the controller draws one (UX-019), else a title.
+    const title = iconOnly && !this.tipped ? row.name : "";
     if (this.title !== title) this.title = title;
   }
 }
@@ -731,10 +750,44 @@ button { font: inherit; color: inherit; }
 .row-opts .field input[aria-invalid="true"] { border-color: var(--esp-error-color); }
 .row-opts .field input:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 1px; }
 .row-opts .note { margin-top: -4px; }
+/* A warning (UX-010): HA's warning colour mixed 40% toward the text colour, 5.3:1 on the options panel (light). */
+.warning { font-size: var(--ha-font-size-s, 12px); color: var(--warning-color, #ffa600);
+  color: color-mix(in srgb, var(--warning-color, #ffa600) 40%, var(--primary-text-color, #212121)); }
+.warning:empty { display: none; }
+/* Entity suggestions under a field (UX-012): "Friendly name (entity_id)", at most 8. */
+.suggest { display: flex; flex-direction: column; margin-top: -4px; border: 1px solid var(--divider-color); border-radius: 6px;
+  background: var(--card-background-color, var(--primary-background-color)); max-height: 296px; overflow-y: auto; }
+.suggest[hidden] { display: none; }
+.option { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 4px; min-height: 36px; box-sizing: border-box; padding: 8px 10px;
+  cursor: pointer; text-align: start; overflow-wrap: anywhere; }
+.option + .option { border-top: 1px solid var(--divider-color); }
+.option:hover, .option[aria-selected="true"] { background: rgba(var(--rgb-primary-color, 3,169,244), 0.14); }
+.option[aria-selected="true"] { outline: 2px solid var(--primary-color); outline-offset: -2px; }
+.option .id { color: var(--secondary-text-color); font-size: var(--ha-font-size-s, 12px); unicode-bidi: isolate; }
+/* A row with a badge or show-only-when rule (UX-011); dimmed like a hidden item while its rule hides it now. */
+.rule { flex: none; width: 18px; height: 18px; display: grid; place-items: center; color: var(--secondary-text-color); }
+.rule svg { width: 16px; height: 16px; fill: currentColor; }
+.row.rule-off .title, .row.rule-off .name-input { color: var(--secondary-text-color); }
+.row.rule-off .icon { opacity: 0.45; }
 .row-opts .check + .note { margin: -8px 0 0; }
 .btn.remove { align-self: flex-start; display: inline-flex; gap: 6px; align-items: center; color: var(--esp-error-color); border-color: var(--esp-error-color); }
 .btn.remove svg { width: 18px; height: 18px; fill: currentColor; }
 .row.link .title { font-style: italic; }
+/* Narrow screens (HA's drawer sidebar, or a phone width): the hint folds behind "?", and the row buttons are 44 px
+   tap targets (UX-015). The "?" button exists only there. */
+.help { display: none; margin-inline-start: auto; font-weight: var(--ha-font-weight-medium, 500); font-size: 18px; color: var(--esp-action-color);
+  border: 1px solid var(--divider-color); }
+.help[aria-expanded="true"] { background: rgba(var(--rgb-primary-color, 3,169,244), 0.18); }
+:host([narrow]) .help { display: grid; width: 44px; height: 44px; }
+:host([narrow]:not([hint-open])) .hint { display: none; }
+:host([narrow]) .handle, :host([narrow]) .icon-btn.eye, :host([narrow]) .icon-btn.more { width: 44px; height: 44px; }
+:host([narrow]) .row { min-height: 44px; }
+@media (max-width: 600px) {
+  .help { display: grid; width: 44px; height: 44px; }
+  :host(:not([hint-open])) .hint { display: none; }
+  .handle, .icon-btn.eye, .icon-btn.more { width: 44px; height: 44px; }
+  .row { min-height: 44px; }
+}
 `;
 
 /**
@@ -753,50 +806,127 @@ function limitInput(input, max) {
  * `errors` (focus key -> { row, value, message }) keeps a refused value and its message across re-renders, so Done can
  * refuse while a field is in error (BUG-021); `row` is the layout key of the row the options belong to.
  */
-function optField({ label, help = null, value, focusKey, dir = null, list = null, limit = null, placeholder = null, errors = null, row = null, commit }) {
+function optField({ label, help = null, value, focusKey, dir = null, limit = null, placeholder = null, errors = null, row = null, warn = null, suggest = null, commit }) {
   const errId = `err-${focusKey.replace(/[^A-Za-z0-9_-]/g, "_")}`;
   const helpId = help ? `help-${errId}` : null;
+  // A non-blocking warning for a value that is valid but suspicious (UX-010): announced, not aria-invalid.
+  const warnId = warn ? `warn-${errId}` : null;
   const pending = errors?.get(focusKey);
   const error = h("div", { class: "error", id: errId, role: "alert" }, pending?.message ?? null);
+  const warning = warn ? h("div", { class: "warning", id: warnId, role: "status" }, pending ? null : warn(value ?? "") || null) : null;
   const run = (input) => {
     const message = commit(input);
     if (message) input.setAttribute("aria-invalid", "true");
     else input.removeAttribute("aria-invalid");
     error.textContent = message || "";
+    if (warning) warning.textContent = message ? "" : warn(input.value);
     if (message) errors?.set(focusKey, { row, value: input.value, message });
     else errors?.delete(focusKey);
   };
+  // Suggestions (UX-012): an own listbox under a combobox field, since a datalist cannot match labels reliably.
+  // `suggest(text)` returns [{ id, name }]; picking one stores the id. Down / Up move, Enter picks, Escape closes.
+  const listId = suggest ? `list-${errId}` : null;
+  const listbox = suggest ? h("div", { class: "suggest", id: listId, role: "listbox", "aria-label": label, hidden: true }) : null;
+  let options = [];
+  let active = -1;
+  const mark = (input) => {
+    listbox.querySelectorAll('[role="option"]').forEach((o, i) => o.setAttribute("aria-selected", String(i === active)));
+    const opt = active >= 0 ? listbox.children[active] : null;
+    setAttr(input, "aria-activedescendant", opt ? opt.id : null);
+    opt?.scrollIntoView?.({ block: "nearest" });
+  };
+  const close = (input) => {
+    if (!listbox) return;
+    options = [];
+    active = -1;
+    listbox.replaceChildren();
+    listbox.hidden = true;
+    input.setAttribute("aria-expanded", "false");
+    setAttr(input, "aria-activedescendant", null);
+  };
+  const pick = (input, i) => {
+    input.value = options[i].id;
+    close(input);
+    run(input);
+  };
+  const show = (input) => {
+    options = suggest(input.value);
+    active = -1;
+    listbox.replaceChildren(
+      ...options.map((o, i) =>
+        h(
+          "div",
+          {
+            class: "option",
+            role: "option",
+            id: `${listId}-${i}`,
+            "aria-selected": "false",
+            // pointerdown, not click: the field keeps its focus (no blur commit before the pick).
+            onpointerdown: (e) => {
+              e.preventDefault();
+              pick(input, i);
+            },
+          },
+          o.name ? [h("bdi", {}, o.name), " ", h("span", { class: "id", dir: "ltr" }, `(${o.id})`)] : h("span", { dir: "ltr" }, o.id),
+        ),
+      ),
+    );
+    listbox.hidden = !options.length;
+    input.setAttribute("aria-expanded", String(options.length > 0));
+    mark(input);
+  };
+  const field = h("input", {
+    type: "text",
+    dir,
+    placeholder,
+    spellcheck: "false",
+    autocomplete: "off",
+    role: suggest ? "combobox" : null,
+    "aria-autocomplete": suggest ? "list" : null,
+    "aria-expanded": suggest ? "false" : null,
+    "aria-controls": listId,
+    "aria-describedby": [errId, warnId, helpId].filter(Boolean).join(" "),
+    "aria-invalid": pending ? "true" : null,
+    "data-focus-key": focusKey,
+    ".value": pending ? pending.value : value ?? "",
+    oninput: (e) => {
+      if (limit) limitInput(e.target, limit);
+      e.target.removeAttribute("aria-invalid");
+      error.textContent = "";
+      if (warning) warning.textContent = "";
+      if (suggest) show(e.target);
+    },
+    onchange: (e) => run(e.target),
+    onblur: (e) => close(e.target),
+    onkeydown: (e) => {
+      const input = e.target;
+      if (suggest && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+        e.preventDefault();
+        if (listbox.hidden) show(input);
+        if (!options.length) return;
+        active = (active + (e.key === "ArrowDown" ? 1 : -1) + options.length) % options.length;
+        mark(input);
+        return;
+      }
+      if (suggest && e.key === "Escape" && !listbox.hidden) {
+        e.preventDefault();
+        e.stopPropagation();
+        close(input);
+        return;
+      }
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      if (suggest && !listbox.hidden && active >= 0) return pick(input, active);
+      close(input);
+      run(input);
+    },
+  });
   return [
-    h(
-      "label",
-      { class: "field" },
-      h("span", {}, label),
-      h("input", {
-        type: "text",
-        dir,
-        list,
-        placeholder,
-        spellcheck: "false",
-        autocomplete: "off",
-        "aria-describedby": [errId, helpId].filter(Boolean).join(" "),
-        "aria-invalid": pending ? "true" : null,
-        "data-focus-key": focusKey,
-        ".value": pending ? pending.value : value ?? "",
-        oninput: (e) => {
-          if (limit) limitInput(e.target, limit);
-          e.target.removeAttribute("aria-invalid");
-          error.textContent = "";
-        },
-        onchange: (e) => run(e.target),
-        onkeydown: (e) => {
-          if (e.key !== "Enter") return;
-          e.preventDefault();
-          run(e.target);
-        },
-      }),
-    ),
+    h("label", { class: "field" }, h("span", {}, label), field),
+    listbox,
     help ? h("div", { class: "note", id: helpId }, help) : null,
     error,
+    warning,
   ];
 }
 
@@ -846,9 +976,9 @@ class EspEditor extends HTMLElement {
     this.nameErrors = new Map();
     // ⋮ option fields left in error (focus key -> { row, value, message }); Done refuses while any is.
     this.optErrors = new Map();
-    // The row whose ⋮ options are open (one at a time), and the entity ids its fields suggest.
+    // The row whose ⋮ options are open (one at a time), and the entities its fields suggest (id + friendly name).
     this.optionsOpen = null;
-    this._entities = h("datalist", { id: "esp-entities" }, (opts.entities ?? []).map((e) => h("option", { value: e })));
+    this.entityChoices = L.entityList(opts.hass?.states);
     this.render();
     requestAnimationFrame(() => this.shadowRoot.querySelector(".bar .btn")?.focus());
   }
@@ -883,6 +1013,41 @@ class EspEditor extends HTMLElement {
   /** An entry's extras as edited (layout key: panel path, "l:<id>" or "g:<id>"). */
   item(key) {
     return this.meta?.items?.[key] ?? {};
+  }
+
+  /**
+   * A row with a badge or show-only-when rule gets a small marker after its name (UX-011), described in a tooltip,
+   * the marker's name and the handle's description; while the condition hides the entry now, the row is dimmed and
+   * says so. Applied in place (row built, or one of its ⋮ fields committed): no re-render, focus stays.
+   */
+  applyRule(row, ikey) {
+    if (!row) return;
+    const rule = L.ruleOf(this.item(ikey), (e) => L.entityActive(this.hass?.states?.[e]));
+    const text = rule
+      ? [
+          rule.badge ? t(this.lang, "ruleBadge", { entity: rule.badge }) : null,
+          rule.showWhen ? t(this.lang, rule.hiddenNow ? "hiddenNow" : "ruleShowWhen", { entity: rule.showWhen }) : null,
+        ]
+          .filter(Boolean)
+          .join(". ")
+      : "";
+    const handle = row.querySelector(":scope > .handle");
+    let mark = row.querySelector(":scope > .rule");
+    row.classList.toggle("rule-off", !!rule?.hiddenNow);
+    setAttr(row, "title", text || null);
+    if (handle) setAttr(handle, "aria-description", text || null);
+    if (!rule) return mark?.remove();
+    if (!mark) {
+      mark = h("span", { class: "rule", role: "img" }, svg(ICONS.rule));
+      row.querySelector(":scope > .title, :scope > .name-input")?.after(mark);
+    }
+    setAttr(mark, "aria-label", text);
+  }
+
+  /** The row of a layout key ("p:<path>", "g:<id>") after one of its ⋮ fields changed. */
+  patchRule(ikey) {
+    const key = ikey.startsWith(L.GROUP_PREFIX) ? ikey : L.panelKey(ikey);
+    this.applyRule(this._q(`.row[data-key="${CSS.escape(key)}"]`), ikey);
   }
 
   _q(selector) {
@@ -999,20 +1164,45 @@ class EspEditor extends HTMLElement {
         { class: "bar-buttons" },
         h("button", { class: "btn primary", type: "button", "data-focus-key": "done", onclick: () => this.actions.done() }, t(lang, "done")),
         h("button", { class: "btn", type: "button", "data-focus-key": "cancel", onclick: () => this.actions.cancel() }, t(lang, "cancel")),
+        // Narrow screens: the hint is folded behind "?" (UX-015). Toggled in place, no re-render.
+        h(
+          "button",
+          {
+            class: "icon-btn help",
+            type: "button",
+            "aria-expanded": String(this.hasAttribute("hint-open")),
+            "aria-controls": "esp-hint",
+            "aria-label": t(lang, "hintToggle"),
+            title: t(lang, "hintToggle"),
+            "data-focus-key": "help",
+            onclick: (e) => {
+              const open = !this.hasAttribute("hint-open");
+              this.toggleAttribute("hint-open", open);
+              e.currentTarget.setAttribute("aria-expanded", String(open));
+            },
+          },
+          "?",
+        ),
       ),
       !this.own && this.hasDefault ? h("div", { class: "note" }, t(lang, "onDefault")) : null,
-      h("div", { class: "note" }, t(lang, "hint")),
+      h("div", { class: "note hint", id: "esp-hint" }, t(lang, "hint")),
       this.notice ? h("div", { class: "notice", role: "alert" }, this.notice) : null,
       this.status ? h("div", { class: "notice", role: "status" }, this.status) : null,
       this.error ? h("div", { class: "error", role: "alert" }, this.error) : null,
       this.error && this.errorDetail ? h("div", { class: "error detail", dir: "ltr" }, t(lang, "errorDetails", { detail: this.errorDetail })) : null,
     );
 
+    // A short visible label where the full one wraps (Hebrew: "קבוצה" / "קישור", UX-016). The full text is the
+    // tooltip and the accessible name, which contains the visible word (WCAG 2.5.3: "הוספת קבוצה" holds "קבוצה").
+    const addBtn = (focusKey, icon, short, full, run) => {
+      const long = short === full ? null : full;
+      return h("button", { class: "add", type: "button", "data-focus-key": focusKey, "aria-label": long, title: long, onclick: run }, svg(icon), short);
+    };
     const add = h(
       "div",
       { class: "adds" },
-      h("button", { class: "add", type: "button", "data-focus-key": "add", onclick: () => this.actions.addGroup() }, svg(ICONS.plus), t(lang, "addGroup")),
-      h("button", { class: "add", type: "button", "data-focus-key": "addlink", onclick: () => this.actions.addLink() }, svg(ICONS.link), t(lang, "addLink")),
+      addBtn("add", ICONS.plus, t(lang, "addGroupShort"), t(lang, "addGroup"), () => this.actions.addGroup()),
+      addBtn("addlink", ICONS.link, t(lang, "addLinkShort"), t(lang, "addLink"), () => this.actions.addLink()),
     );
     const list = h("div", { class: "list", role: "list", "aria-labelledby": "esp-title" });
     for (const node of this.tree) {
@@ -1065,7 +1255,7 @@ class EspEditor extends HTMLElement {
         ),
       );
 
-    this._content.replaceChildren(bar, settings, add, list, footer.childElementCount ? footer : "", this._entities);
+    this._content.replaceChildren(bar, settings, add, list, footer.childElementCount ? footer : "");
 
     if (focusKey) {
       const el = root.querySelector(`[data-focus-key="${CSS.escape(focusKey)}"]`);
@@ -1113,6 +1303,7 @@ class EspEditor extends HTMLElement {
       ),
       input,
     );
+    this.applyRule(head, key);
     const nameError = h(
       "div",
       { class: "error field-error", id: `name-err-${node.id}`, role: "alert" },
@@ -1471,6 +1662,7 @@ class EspEditor extends HTMLElement {
         svg(ICONS.more),
       ),
     );
+    this.applyRule(row, L.itemKey(key));
     return this.optionsOpen === key ? [row, this.optionsPanel(key)] : row;
   }
 
@@ -1529,6 +1721,32 @@ class EspEditor extends HTMLElement {
           placeholder: DEFAULT_LINK_ICON,
           commit: (input) => this.actions.setLink(id, "icon", input.value),
         }),
+        // Tappable suggestions, like a group's: a tap fills the field and commits it (no re-render).
+        h(
+          "div",
+          { class: "chips" },
+          LINK_ICONS.map((icon) =>
+            h(
+              "button",
+              {
+                class: "icon-btn chip",
+                type: "button",
+                "aria-label": icon,
+                title: icon,
+                "aria-pressed": String(link.icon === icon),
+                "data-link-chip": id,
+                "data-focus-key": `lchip:${id}:${icon}`,
+                onclick: () => {
+                  const input = this._q(`[data-focus-key="${CSS.escape(fk("icon"))}"]`);
+                  if (!input) return;
+                  input.value = icon;
+                  input.dispatchEvent(new Event("change"));
+                },
+              },
+              iconEl(icon),
+            ),
+          ),
+        ),
         h(
           "label",
           { class: "check" },
@@ -1568,9 +1786,12 @@ class EspEditor extends HTMLElement {
         focusKey: fk(field),
         errors,
         row: key,
-        dir: "ltr",
-        list: "esp-entities",
+        // auto: ids are Latin, a friendly name typed to find one may be Hebrew.
+        dir: "auto",
+        suggest: (text) => L.matchEntities(this.entityChoices, text),
         placeholder: field === "badge" ? "sensor.open_windows" : "binary_sensor.alarm",
+        // Saving stays allowed: the entity may come back (an integration that is off).
+        warn: (v) => (L.unknownEntity(v, this.hass?.states) ? t(lang, "entityMissing") : ""),
         commit: (input) => this.actions.setItem(ikey, field, input.value),
       });
     parts.push(
@@ -1612,6 +1833,9 @@ class EspEditor extends HTMLElement {
     if (title && title.textContent !== info.title) title.textContent = info.title;
     const icon = row.querySelector("ha-icon.icon");
     if (icon) icon.icon = info.icon;
+    const own = this.meta?.links?.[id]?.icon ?? null;
+    for (const chip of this.shadowRoot.querySelectorAll(`[data-link-chip="${CSS.escape(id)}"]`))
+      chip.setAttribute("aria-pressed", String(chip.getAttribute("aria-label") === own));
     for (const [sel, text] of [
       [".handle", t(this.lang, "drag", { name: info.title })],
       [".more", t(this.lang, "options", { name: info.title })],
@@ -1973,6 +2197,19 @@ a:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 1px; 
 :host([bottom]) { top: auto; bottom: 0; z-index: 4;
   height: calc(${TABS_HEIGHT}px + var(--safe-area-inset-bottom, 0px)); padding: 0 12px var(--safe-area-inset-bottom, 0px);
   border-bottom: none; border-top: 1px solid var(--divider-color); }
+/* Not HA's own bottom tabs (UX-014): a theme-coloured top edge and the group's icon at the start mark it as the
+   group's bar; tabs stay pills with icon and text side by side (HA's stack them). */
+:host([bottom]) { border-top: 2px solid var(--esp-tab-current); gap: 8px; padding-inline-start: 8px; }
+:host([bottom]) .title { display: flex; max-width: none; color: var(--esp-tab-current); }
+:host([bottom]) .title span { display: none; }
+:host([bottom]) .title .icon { --mdc-icon-size: 22px; width: 22px; height: 22px; }
+/* An edge fade where more tabs scroll in, only on the side(s) that hide some (start / end, RTL aware). */
+nav[data-fade-start], nav[data-fade-end] {
+  -webkit-mask-image: linear-gradient(to var(--esp-fade-to, right), transparent 0, #000 var(--esp-fs, 0px), #000 calc(100% - var(--esp-fe, 0px)), transparent 100%);
+  mask-image: linear-gradient(to var(--esp-fade-to, right), transparent 0, #000 var(--esp-fs, 0px), #000 calc(100% - var(--esp-fe, 0px)), transparent 100%); }
+nav[data-fade-start] { --esp-fs: 32px; }
+nav[data-fade-end] { --esp-fe: 32px; }
+:host([rtl]) nav { --esp-fade-to: left; }
 `;
 
 class EspTabs extends HTMLElement {
@@ -1982,9 +2219,20 @@ class EspTabs extends HTMLElement {
     const style = h("style");
     style.textContent = TABS_CSS;
     this._title = h("div", { class: "title", "aria-hidden": "true" });
-    this._nav = h("nav");
+    this._nav = h("nav", { onscroll: () => this._fade() });
     root.append(style, this._title, this._nav);
     this._sig = "";
+    // The edge fade follows the list's width too (rotation, the drawer opening); feature detected.
+    if (typeof ResizeObserver === "function") new ResizeObserver(() => this._fade()).observe(this._nav);
+  }
+
+  /** Mark the ends of the tab list that hide more tabs (the CSS fades them); written on change only. */
+  _fade() {
+    const nav = this._nav;
+    const { start, end } = L.fadeEdges(nav.scrollLeft, nav.scrollWidth, nav.clientWidth);
+    setFlag(nav, "data-fade-start", start);
+    setFlag(nav, "data-fade-end", end);
+    setFlag(this, "rtl", getComputedStyle(nav).direction === "rtl");
   }
 
   /** view: { name, icon, tabs: [{ path, href, newTab, title, icon }], selected }. Rebuilt only when it changes. */
@@ -2015,7 +2263,10 @@ class EspTabs extends HTMLElement {
         ),
       ),
     );
-    requestAnimationFrame(() => this._nav.querySelector('[aria-current="page"]')?.scrollIntoView({ block: "nearest", inline: "nearest" }));
+    requestAnimationFrame(() => {
+      this._nav.querySelector('[aria-current="page"]')?.scrollIntoView({ block: "nearest", inline: "nearest" });
+      this._fade();
+    });
   }
 }
 
@@ -2058,7 +2309,9 @@ ha-list-item-button[data-esp-group]:not(.selected) ha-svg-icon[slot="start"] { c
 .esp-btn:focus-visible { outline: 2px solid var(--primary-color); }
 .esp-btn svg { width: 20px; height: 20px; fill: currentColor; }
 :host(:not([expanded])) .esp-btn { display: none; }
-/* Badges (v0.5): HA styles .badge and places the rail one after an SVG icon; dashboards and links use ha-icon. */
+/* Badges (v0.5): HA styles .badge and places the rail one after an SVG icon; dashboards and links use ha-icon.
+   Our badges only (HA's own Settings badge keeps HA's look): a darker fill, white text 4.5:1 and the dot 3:1 (BUG-016). */
+ha-list-item-button > .badge.esp-badge { background-color: var(--accent-color); background-color: color-mix(in srgb, var(--accent-color) 60%, black); color: #fff; }
 ha-icon + .badge.esp-badge { position: absolute; top: var(--ha-space-1, 4px); left: 26px; border-radius: var(--ha-border-radius-md, 8px); font-size: 0.65em;
   line-height: var(--ha-line-height-expanded, 1.5); padding: 0 var(--ha-space-1, 4px); }
 .badge.esp-dot { min-width: 0; width: 10px; height: 10px; padding: 0; border-radius: 50%; }
@@ -2077,6 +2330,9 @@ class Controller {
     this.editing = false;
     this.dirty = false;
     this.groupEls = new Map();
+    // The rail's ha-tooltip per group (UX-019), and the counter behind the group elements' ids.
+    this.groupTips = new Map();
+    this.groupSeq = 0;
     this.rowGroups = new Map();
     this.groupNames = new Map();
     this.descIds = new Map();
@@ -2292,7 +2548,11 @@ class Controller {
     const at = (this.renderedLink = L.linkAt(layout?.links, location.pathname));
     selected = at && visible.includes(at) ? at : selected;
     this.selected = selected;
-    if (this.editing) return [this.editor];
+    if (this.editing) {
+      // HA's drawer sidebar (phones): the editor folds its hint and takes 44 px row buttons.
+      setFlag(this.editor, "narrow", this.sb.hasAttribute("narrow"));
+      return [this.editor];
+    }
     this.settings = L.cleanSettings(layout?.settings);
     if (this.sessionInitial && this.session !== null) {
       this.session = L.initialCollapsed(layout, visible, this.settings.accordion);
@@ -2344,16 +2604,42 @@ class Controller {
       let el = this.groupEls.get(r.id);
       if (!el) {
         el = document.createElement("esp-group");
+        // Layout ids are free text: the element id (the tooltip's anchor) is a counter.
+        el.id = `esp-group-${++this.groupSeq}`;
         this.groupEls.set(r.id, el);
       }
+      const tip = this.groupTip(r, el, iconOnly, rtl);
+      el.tipped = !!tip;
       // While searching, groups show unfolded with their matches: a click does not fold them; a tabbed
       // group found by one of its panels opens that tab.
-      el.onToggle = r.tabbed ? () => this.openTabs(r.id, r.match ? [r.match] : r.paths) : searching ? () => {} : () => this.toggle(r.id);      el.update(r, this.lang, iconOnly, rtl, this.groupLooks.get(r.id), this.settings.header, this.settings.hide_count);
-      return el;
+      el.onToggle = r.tabbed ? () => this.openTabs(r.id, r.match ? [r.match] : r.paths) : searching ? () => {} : () => this.toggle(r.id);
+      el.update(r, this.lang, iconOnly, rtl, this.groupLooks.get(r.id), this.settings.header, this.settings.hide_count);
+      return tip ? [el, tip] : el;
     });
     for (const id of [...this.groupEls.keys()]) if (!used.has(id)) this.groupEls.delete(id);
+    for (const id of [...this.groupTips.keys()]) if (!used.has(id)) this.groupTips.delete(id);
     if (this.settings.search) out.unshift(this.searchBox(iconOnly, rows.length > 0));
     return out;
+  }
+
+  /**
+   * In the icon-only rail a group gets HA's own tooltip with its full name, drawn as HA's _renderToolTip does for
+   * its rows: an <ha-tooltip for="<row id>"> beside the row, beside the sidebar's edge (left in RTL). Feature
+   * detected: without ha-tooltip the group keeps a title. The row's accessible name is unchanged.
+   */
+  groupTip(row, el, iconOnly, rtl) {
+    if (!iconOnly || !customElements.get("ha-tooltip")) return null;
+    let tip = this.groupTips.get(row.id);
+    if (!tip) {
+      tip = document.createElement("ha-tooltip");
+      tip.setAttribute("show-delay", "0");
+      tip.setAttribute("hide-delay", "0");
+      this.groupTips.set(row.id, tip);
+    }
+    setAttr(tip, "for", el.id);
+    setAttr(tip, "placement", rtl ? "left" : "right");
+    setText(tip, row.name);
+    return tip;
   }
 
   /** The search box, one element for the life of the sidebar (it keeps its focus and caret across renders). */
@@ -2892,7 +3178,6 @@ class Controller {
       tree,
       settings,
       meta,
-      entities: Object.keys(this.hass.states ?? {}).sort(),
       look: (color, iconColor) => this.look(color, iconColor),
       hexOf: (color) => this.hexOf(color),
       hiddenSet: hidden,
@@ -3019,6 +3304,7 @@ class Controller {
         const next = { ...e.item(ikey), [field]: clean };
         if (L.cleanItem(next)) e.meta.items[ikey] = next;
         else delete e.meta.items[ikey];
+        e.patchRule(ikey);
         return "";
       },
       rename: (id, input) => {
