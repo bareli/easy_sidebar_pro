@@ -81,6 +81,8 @@ the same layout to every user who has not made their own.
     open or above 0, for example an "Alarm" group only while `input_boolean.alarm` is on.
   - **Search words**: other names the search box finds the item by.
   - The editor warns under the field when an entity does not exist in Home Assistant (it still saves).
+  - In the editor a small lightning mark shows which rows have a badge or a show-only-when rule (its tooltip names
+    the entities); a row its rule hides right now is dimmed ("Hidden now: ... is off").
 - **Search box** (editor, **Display options**, off by default): type part of a name at the top of the sidebar to
   see only the items whose names contain it (any case), with their groups unfolded. It also finds Home
   Assistant's own English names of built-in panels (type "his" for History in any language), links by name or

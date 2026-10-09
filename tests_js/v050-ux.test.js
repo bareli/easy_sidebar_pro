@@ -186,6 +186,36 @@ test("#52 entity fields show a role=status warning (not aria-invalid), described
   assert.doesNotMatch(fn, /errors\?\.set\([^)]*warn/);
 });
 
+/* ---- #53 UX-011: rule marker on editor rows, dimmed while the rule hides the row ---- */
+
+test("#53 ruleOf: badge / show-when entities and whether the condition hides the entry now", () => {
+  const on = (e) => e === "input_boolean.alarm";
+  assert.equal(L.ruleOf({}, on), null);
+  assert.equal(L.ruleOf({ aliases: "x" }, on), null);
+  assert.equal(L.ruleOf({ badge: "bad id" }, on), null);
+  assert.deepEqual(L.ruleOf({ badge: "counter.open_windows" }, on), { badge: "counter.open_windows", showWhen: null, hiddenNow: false });
+  assert.deepEqual(L.ruleOf({ show_when: "input_boolean.alarm" }, on), { badge: null, showWhen: "input_boolean.alarm", hiddenNow: false });
+  assert.deepEqual(L.ruleOf({ badge: "counter.c", show_when: "input_boolean.off" }, on), { badge: "counter.c", showWhen: "input_boolean.off", hiddenNow: true });
+});
+
+test("#53 the marker and dimming are applied when rows are built and patched in place after a ⋮ field commit", () => {
+  assert.match(EN, /\n {4}hiddenNow: "Hidden now: \{entity\} is off",/);
+  assert.match(HE, /\n {4}hiddenNow: "מוסתר כעת: \{entity\} כבוי",/);
+  assert.match(EN, /\n {4}ruleBadge: "[^"]*\{entity\}[^"]*",/);
+  assert.match(HE, /\n {4}ruleShowWhen: "[^"]*\{entity\}[^"]*",/);
+  const fn = SRC.slice(SRC.indexOf("  applyRule(row, ikey) {"), SRC.indexOf("  /** The row of a layout key"));
+  assert.match(fn, /row\.classList\.toggle\("rule-off", !!rule\?\.hiddenNow\);/);
+  assert.match(fn, /setAttr\(row, "title", text \|\| null\);/);
+  assert.match(fn, /setAttr\(handle, "aria-description", text \|\| null\);/);
+  assert.match(fn, /h\("span", \{ class: "rule", role: "img" \}, svg\(ICONS\.rule\)\)/);
+  assert.match(SRC, /this\.applyRule\(row, L\.itemKey\(key\)\);\n\s+return this\.optionsOpen === key/);
+  assert.match(SRC, /this\.applyRule\(head, key\);/);
+  // setItem patches the row in place (no editor re-render that drops focus).
+  const setItem = SRC.slice(SRC.indexOf("      setItem: (ikey, field, value) => {"), SRC.indexOf("      rename: (id, input) => {"));
+  assert.match(setItem, /e\.patchRule\(ikey\);/);
+  assert.doesNotMatch(setItem, /e\.set\(|\.render\(\)/);
+});
+
 /* ---- #62 UX-020: the hint says where the search box is ---- */
 
 test("#62 the editor hint ends with where to turn on the search box", () => {

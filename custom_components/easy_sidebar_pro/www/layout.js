@@ -256,6 +256,17 @@ export function hiddenByCondition(layout, active) {
   return out;
 }
 
+/**
+ * The rules on one entry, for the editor's marker (UX-011): its badge and show-only-when entities, and whether
+ * the condition hides the entry right now (`active(entityId)`). null when the entry has neither.
+ */
+export function ruleOf(item, active) {
+  const badge = validEntity(item?.badge) ? item.badge : null;
+  const showWhen = validEntity(item?.show_when) ? item.show_when : null;
+  if (!badge && !showWhen) return null;
+  return { badge, showWhen, hiddenNow: !!showWhen && !active(showWhen) };
+}
+
 /** Entity ids a layout's badges and conditions read (the sidebar re-renders when one of them changes). */
 export function watchedEntities(layout) {
   const out = new Set();

@@ -31,6 +31,7 @@ const ICONS = {
   more: "M12,16A2,2 0 0,1 14,18A2,2 0 0,1 12,20A2,2 0 0,1 10,18A2,2 0 0,1 12,16M12,10A2,2 0 0,1 14,12A2,2 0 0,1 12,14A2,2 0 0,1 10,12A2,2 0 0,1 12,10M12,4A2,2 0 0,1 14,6A2,2 0 0,1 12,8A2,2 0 0,1 10,6A2,2 0 0,1 12,4Z",
   link: "M10.59,13.41C11,13.8 11,14.44 10.59,14.83C10.2,15.22 9.56,15.22 9.17,14.83C7.22,12.88 7.22,9.71 9.17,7.76V7.76L12.71,4.22C14.66,2.27 17.83,2.27 19.78,4.22C21.73,6.17 21.73,9.34 19.78,11.29L18.29,12.78C18.3,11.96 18.17,11.14 17.89,10.36L18.36,9.88C19.54,8.71 19.54,6.81 18.36,5.64C17.19,4.46 15.29,4.46 14.12,5.64L10.59,9.17C9.41,10.34 9.41,12.24 10.59,13.41M13.41,9.17C13.8,8.78 14.44,8.78 14.83,9.17C16.78,11.12 16.78,14.29 14.83,16.24V16.24L11.29,19.78C9.34,21.73 6.17,21.73 4.22,19.78C2.27,17.83 2.27,14.66 4.22,12.71L5.71,11.22C5.7,12.04 5.83,12.86 6.11,13.65L5.64,14.12C4.46,15.29 4.46,17.19 5.64,18.36C6.81,19.54 8.71,19.54 9.88,18.36L13.41,14.83C14.59,13.66 14.59,11.76 13.41,10.59C13,10.2 13,9.56 13.41,9.17Z",
   delete: "M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z",
+  rule: "M11,15H6L13,1V9H18L11,23V15Z",
 };
 const DEFAULT_LINK_ICON = "mdi:link-variant";
 // A link row is HA's own panel row with this stand-in path (its id is "sidebar-panel-<LINK_ROW><id>"); its
@@ -206,6 +207,9 @@ const STRINGS = {
     aliases: "Search words",
     aliasesHelp: "Other names the search box finds this by, for example its English name.",
     badgeActive: "active",
+    ruleBadge: "Badge: {entity}",
+    ruleShowWhen: "Shown only while {entity} is on",
+    hiddenNow: "Hidden now: {entity} is off",
     viewOf: "{view} · {dash}",
   },
   he: {
@@ -340,6 +344,9 @@ const STRINGS = {
     aliases: "מילות חיפוש",
     aliasesHelp: "שמות נוספים שתיבת החיפוש תמצא לפיהם, למשל השם באנגלית.",
     badgeActive: "פעיל",
+    ruleBadge: "מספר על הפריט: {entity}",
+    ruleShowWhen: "מוצג רק כש-{entity} פעיל",
+    hiddenNow: "מוסתר כעת: {entity} כבוי",
     viewOf: "{view} · {dash}",
   },
 };
@@ -747,6 +754,11 @@ button { font: inherit; color: inherit; }
 .warning { font-size: var(--ha-font-size-s, 12px); color: var(--warning-color, #ffa600);
   color: color-mix(in srgb, var(--warning-color, #ffa600) 40%, var(--primary-text-color, #212121)); }
 .warning:empty { display: none; }
+/* A row with a badge or show-only-when rule (UX-011); dimmed like a hidden item while its rule hides it now. */
+.rule { flex: none; width: 18px; height: 18px; display: grid; place-items: center; color: var(--secondary-text-color); }
+.rule svg { width: 16px; height: 16px; fill: currentColor; }
+.row.rule-off .title, .row.rule-off .name-input { color: var(--secondary-text-color); }
+.row.rule-off .icon { opacity: 0.45; }
 .row-opts .check + .note { margin: -8px 0 0; }
 .btn.remove { align-self: flex-start; display: inline-flex; gap: 6px; align-items: center; color: var(--esp-error-color); border-color: var(--esp-error-color); }
 .btn.remove svg { width: 18px; height: 18px; fill: currentColor; }
@@ -920,6 +932,41 @@ class EspEditor extends HTMLElement {
   /** An entry's extras as edited (layout key: panel path, "l:<id>" or "g:<id>"). */
   item(key) {
     return this.meta?.items?.[key] ?? {};
+  }
+
+  /**
+   * A row with a badge or show-only-when rule gets a small marker after its name (UX-011), described in a tooltip,
+   * the marker's name and the handle's description; while the condition hides the entry now, the row is dimmed and
+   * says so. Applied in place (row built, or one of its ⋮ fields committed): no re-render, focus stays.
+   */
+  applyRule(row, ikey) {
+    if (!row) return;
+    const rule = L.ruleOf(this.item(ikey), (e) => L.entityActive(this.hass?.states?.[e]));
+    const text = rule
+      ? [
+          rule.badge ? t(this.lang, "ruleBadge", { entity: rule.badge }) : null,
+          rule.showWhen ? t(this.lang, rule.hiddenNow ? "hiddenNow" : "ruleShowWhen", { entity: rule.showWhen }) : null,
+        ]
+          .filter(Boolean)
+          .join(". ")
+      : "";
+    const handle = row.querySelector(":scope > .handle");
+    let mark = row.querySelector(":scope > .rule");
+    row.classList.toggle("rule-off", !!rule?.hiddenNow);
+    setAttr(row, "title", text || null);
+    if (handle) setAttr(handle, "aria-description", text || null);
+    if (!rule) return mark?.remove();
+    if (!mark) {
+      mark = h("span", { class: "rule", role: "img" }, svg(ICONS.rule));
+      row.querySelector(":scope > .title, :scope > .name-input")?.after(mark);
+    }
+    setAttr(mark, "aria-label", text);
+  }
+
+  /** The row of a layout key ("p:<path>", "g:<id>") after one of its ⋮ fields changed. */
+  patchRule(ikey) {
+    const key = ikey.startsWith(L.GROUP_PREFIX) ? ikey : L.panelKey(ikey);
+    this.applyRule(this._q(`.row[data-key="${CSS.escape(key)}"]`), ikey);
   }
 
   _q(selector) {
@@ -1175,6 +1222,7 @@ class EspEditor extends HTMLElement {
       ),
       input,
     );
+    this.applyRule(head, key);
     const nameError = h(
       "div",
       { class: "error field-error", id: `name-err-${node.id}`, role: "alert" },
@@ -1533,6 +1581,7 @@ class EspEditor extends HTMLElement {
         svg(ICONS.more),
       ),
     );
+    this.applyRule(row, L.itemKey(key));
     return this.optionsOpen === key ? [row, this.optionsPanel(key)] : row;
   }
 
@@ -3147,6 +3196,7 @@ class Controller {
         const next = { ...e.item(ikey), [field]: clean };
         if (L.cleanItem(next)) e.meta.items[ikey] = next;
         else delete e.meta.items[ikey];
+        e.patchRule(ikey);
         return "";
       },
       rename: (id, input) => {
