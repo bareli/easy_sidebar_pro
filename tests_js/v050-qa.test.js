@@ -172,6 +172,33 @@ test("#43 the error colour mix reaches 4.5:1 on the options panel and the sideba
   }
 });
 
+/* ---- #49 PERF-004: group rows and header buttons write only on change ---- */
+
+test("#49 EspGroup.update writes attributes, properties and text only when they change", () => {
+  const start = SRC.indexOf("  update(row, lang, iconOnly, rtl, look = null");
+  const body = SRC.slice(start, SRC.indexOf("\n  }\n", start));
+  assert.ok(start > 0);
+  // no raw writes: every attribute / text goes through the on-change helpers
+  for (const raw of [/\.setAttribute\(/, /\.removeAttribute\(/, /\.toggleAttribute\(/, /\.textContent =/, /\.hidden =/]) assert.ok(!raw.test(body), String(raw));
+  // property writes are guarded by a comparison
+  for (const line of body.split("\n").filter((l) => /(this\.title|\._icon\.icon) = /.test(l))) assert.match(line, /if \(.+!==.+\)/, line);
+  for (const helper of ["function setAttr(el, name, value)", "function setFlag(el, name, on)", "function setText(el, text)"]) assert.ok(SRC.includes(helper), helper);
+  assert.match(SRC, /if \(el\.getAttribute\(name\) !== value\) el\.setAttribute\(name, value\);/);
+  assert.match(SRC, /if \(el\.hasAttribute\(name\) !== on\) el\.toggleAttribute\(name, on\);/);
+  assert.match(SRC, /if \(el\.textContent !== text\) el\.textContent = text;/);
+});
+
+test("#49 the pencil and collapse-all buttons write only on change", () => {
+  const start = SRC.indexOf('const all = button("esp-all"');
+  const block = SRC.slice(start, SRC.indexOf("\n  }\n", start));
+  assert.ok(start > 0);
+  assert.ok(!/\b(all|edit)\.hidden =/.test(block));
+  assert.ok(!/edit\.setAttribute\(/.test(block));
+  assert.match(block, /setFlag\(all, "hidden", /);
+  assert.match(block, /setFlag\(edit, "hidden", !!this\.editing\);/);
+  assert.match(block, /setAttr\(edit, "aria-label", editLabel\);\n\s+if \(edit\.title !== editLabel\) edit\.title = editLabel;/);
+});
+
 /* ---- #48 SEC-003: scheme matched in ASCII only (parity with layout.py) ---- */
 
 test("#48 httpſ:// and HTTPſ:// are refused, ASCII case variants accepted", () => {

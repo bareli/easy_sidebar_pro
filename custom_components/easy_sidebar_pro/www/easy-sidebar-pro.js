@@ -391,6 +391,23 @@ function setVar(el, name, value) {
   else el.style.removeProperty(name);
 }
 
+/** Set (or, for null, remove) an attribute only when it changes: a write of the same value is still a mutation (PERF-004). */
+function setAttr(el, name, value) {
+  if (value === null || value === undefined) {
+    if (el.hasAttribute(name)) el.removeAttribute(name);
+  } else if (el.getAttribute(name) !== value) el.setAttribute(name, value);
+}
+
+/** A boolean attribute, written only when it changes. */
+function setFlag(el, name, on) {
+  if (el.hasAttribute(name) !== on) el.toggleAttribute(name, on);
+}
+
+/** Text content, replaced only when it changes (each assignment replaces the text node). */
+function setText(el, text) {
+  if (el.textContent !== text) el.textContent = text;
+}
+
 /** The layout path of one of HA's sidebar rows: its panel path, or "l:<id>" for a link row. */
 function rowPath(item) {
   const path = item.id.slice("sidebar-panel-".length);
@@ -519,6 +536,8 @@ class EspGroup extends HTMLElement {
   }
 
   /** look: { text, icon, bg, line, sub, sel, selIcon } CSS colours (null = theme default), header (L.HEADER_STYLES); hideCount drops the folded count (#36). */
+  // Every write is on change only: HA re-renders the sidebar on every state change, and an unchanged
+  // value written again still costs a style / layout pass (PERF-004).
   update(row, lang, iconOnly, rtl, look = null, header = "plain", hideCount = false) {
     setVar(this, "--esp-own-color", look?.text);
     setVar(this, "--esp-own-icon-color", look?.icon);
@@ -527,38 +546,39 @@ class EspGroup extends HTMLElement {
     setVar(this, "--esp-own-sub", look?.sub);
     setVar(this, "--esp-own-sel", look?.sel);
     setVar(this, "--esp-own-sel-icon", look?.selIcon);
-    if (this.getAttribute("header") !== header) this.setAttribute("header", header);
-    this._icon.icon = row.icon || DEFAULT_ICON;
-    this._name.textContent = row.name;
+    setAttr(this, "header", header);
+    const icon = row.icon || DEFAULT_ICON;
+    if (this._icon.icon !== icon) this._icon.icon = icon;
+    setText(this._name, row.name);
     const tabbed = row.tabbed === true;
     const collapsed = !tabbed && row.collapsed;
     const count = row.count === 1 ? t(lang, "items1") : t(lang, "items", { n: row.count });
-    this._count.textContent = collapsed && !hideCount ? String(row.count) : "";
-    this.toggleAttribute("tabbed", tabbed);
-    this.toggleAttribute("collapsed", collapsed);
-    this.toggleAttribute("selected", (tabbed || collapsed) && row.selected);
-    this.toggleAttribute("icon-only", iconOnly);
-    this.toggleAttribute("rtl", rtl);
+    setText(this._count, collapsed && !hideCount ? String(row.count) : "");
+    setFlag(this, "tabbed", tabbed);
+    setFlag(this, "collapsed", collapsed);
+    setFlag(this, "selected", (tabbed || collapsed) && !!row.selected);
+    setFlag(this, "icon-only", !!iconOnly);
+    setFlag(this, "rtl", !!rtl);
     // The badge is drawn here and read as part of the row's name (the visible one is aria-hidden).
     const badge = row.badge ?? null;
     const badgeText = L.badgeText(badge);
-    this._badge.hidden = !badge;
-    this._badge.toggleAttribute("data-dot", !!badge && !badge.count);
-    if (this._badge.textContent !== badgeText) this._badge.textContent = badgeText;
+    setFlag(this._badge, "hidden", !badge);
+    setFlag(this._badge, "data-dot", !!badge && !badge.count);
+    setText(this._badge, badgeText);
     const said = badge ? `, ${badge.count ? badgeText : t(lang, "badgeActive")}` : "";
     // A tabbed group opens a page (a link, current while one of its tabs is open); others fold.
-    this._row.setAttribute("role", tabbed ? "link" : "button");
+    setAttr(this._row, "role", tabbed ? "link" : "button");
     if (tabbed) {
-      this._row.removeAttribute("aria-expanded");
-      this._row.setAttribute("aria-label", `${row.name}${said}`);
-      if (row.selected) this._row.setAttribute("aria-current", "page");
-      else this._row.removeAttribute("aria-current");
+      setAttr(this._row, "aria-expanded", null);
+      setAttr(this._row, "aria-label", `${row.name}${said}`);
+      setAttr(this._row, "aria-current", row.selected ? "page" : null);
     } else {
-      this._row.removeAttribute("aria-current");
-      this._row.setAttribute("aria-expanded", String(!row.collapsed));
-      this._row.setAttribute("aria-label", `${row.name}, ${count}${said}`);
+      setAttr(this._row, "aria-current", null);
+      setAttr(this._row, "aria-expanded", String(!row.collapsed));
+      setAttr(this._row, "aria-label", `${row.name}, ${count}${said}`);
     }
-    this.title = iconOnly ? row.name : "";
+    const title = iconOnly ? row.name : "";
+    if (this.title !== title) this.title = title;
   }
 }
 
@@ -2609,7 +2629,8 @@ class Controller {
       if (all.nextElementSibling !== edit) menu.insertBefore(all, edit);
       const ids = [...this.groupNames.keys()];
       const action = L.allAction(this.collapsed, ids, this.settings.accordion);
-      all.hidden = this.editing || !this.settings.toggle_all || ids.length < 2 || !action;
+      // Written on change only, like the rows (PERF-004).
+      setFlag(all, "hidden", this.editing || !this.settings.toggle_all || ids.length < 2 || !action);
       if (!all.hidden) {
         const open = action === "collapse";
         const label = t(this.lang, open ? "collapseAll" : "expandAll");
@@ -2619,9 +2640,10 @@ class Controller {
           all.replaceChildren(svg(open ? ICONS.collapseAll : ICONS.expandAll));
         }
       }
-      edit.hidden = this.editing;
-      edit.setAttribute("aria-label", t(this.lang, "edit"));
-      edit.title = t(this.lang, "edit");
+      setFlag(edit, "hidden", !!this.editing);
+      const editLabel = t(this.lang, "edit");
+      setAttr(edit, "aria-label", editLabel);
+      if (edit.title !== editLabel) edit.title = editLabel;
     }
   }
 
