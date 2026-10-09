@@ -201,6 +201,7 @@ const STRINGS = {
     badgeHelp: "Shows the entity's number, or a dot while it is on, open or active. A folded group adds up its items' badges.",
     showWhen: "Show only while this entity is on",
     showWhenHelp: "Empty: always shown. Off, closed, 0, unavailable: hidden.",
+    entityMissing: "This entity does not exist in Home Assistant.",
     entityInvalid: "Use an entity id, for example binary_sensor.front_door",
     aliases: "Search words",
     aliasesHelp: "Other names the search box finds this by, for example its English name.",
@@ -334,6 +335,7 @@ const STRINGS = {
     badgeHelp: "מציג את המספר של הישות, או נקודה כשהיא פעילה, פתוחה או דלוקה. קבוצה מקופלת מסכמת את התגים של הפריטים שבה.",
     showWhen: "הצגה רק כשהישות הזו פעילה",
     showWhenHelp: "ריק: מוצג תמיד. כבוי, סגור, 0 או לא זמין: מוסתר.",
+    entityMissing: "הישות הזו לא קיימת ב-Home Assistant.",
     entityInvalid: "הזינו מזהה ישות, למשל binary_sensor.front_door",
     aliases: "מילות חיפוש",
     aliasesHelp: "שמות נוספים שתיבת החיפוש תמצא לפיהם, למשל השם באנגלית.",
@@ -741,6 +743,10 @@ button { font: inherit; color: inherit; }
 .row-opts .field input[aria-invalid="true"] { border-color: var(--esp-error-color); }
 .row-opts .field input:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 1px; }
 .row-opts .note { margin-top: -4px; }
+/* A warning (UX-010): HA's warning colour mixed 40% toward the text colour, 5.3:1 on the options panel (light). */
+.warning { font-size: var(--ha-font-size-s, 12px); color: var(--warning-color, #ffa600);
+  color: color-mix(in srgb, var(--warning-color, #ffa600) 40%, var(--primary-text-color, #212121)); }
+.warning:empty { display: none; }
 .row-opts .check + .note { margin: -8px 0 0; }
 .btn.remove { align-self: flex-start; display: inline-flex; gap: 6px; align-items: center; color: var(--esp-error-color); border-color: var(--esp-error-color); }
 .btn.remove svg { width: 18px; height: 18px; fill: currentColor; }
@@ -778,16 +784,20 @@ function limitInput(input, max) {
  * `errors` (focus key -> { row, value, message }) keeps a refused value and its message across re-renders, so Done can
  * refuse while a field is in error (BUG-021); `row` is the layout key of the row the options belong to.
  */
-function optField({ label, help = null, value, focusKey, dir = null, list = null, limit = null, placeholder = null, errors = null, row = null, commit }) {
+function optField({ label, help = null, value, focusKey, dir = null, list = null, limit = null, placeholder = null, errors = null, row = null, warn = null, commit }) {
   const errId = `err-${focusKey.replace(/[^A-Za-z0-9_-]/g, "_")}`;
   const helpId = help ? `help-${errId}` : null;
+  // A non-blocking warning for a value that is valid but suspicious (UX-010): announced, not aria-invalid.
+  const warnId = warn ? `warn-${errId}` : null;
   const pending = errors?.get(focusKey);
   const error = h("div", { class: "error", id: errId, role: "alert" }, pending?.message ?? null);
+  const warning = warn ? h("div", { class: "warning", id: warnId, role: "status" }, pending ? null : warn(value ?? "") || null) : null;
   const run = (input) => {
     const message = commit(input);
     if (message) input.setAttribute("aria-invalid", "true");
     else input.removeAttribute("aria-invalid");
     error.textContent = message || "";
+    if (warning) warning.textContent = message ? "" : warn(input.value);
     if (message) errors?.set(focusKey, { row, value: input.value, message });
     else errors?.delete(focusKey);
   };
@@ -803,7 +813,7 @@ function optField({ label, help = null, value, focusKey, dir = null, list = null
         placeholder,
         spellcheck: "false",
         autocomplete: "off",
-        "aria-describedby": [errId, helpId].filter(Boolean).join(" "),
+        "aria-describedby": [errId, warnId, helpId].filter(Boolean).join(" "),
         "aria-invalid": pending ? "true" : null,
         "data-focus-key": focusKey,
         ".value": pending ? pending.value : value ?? "",
@@ -811,6 +821,7 @@ function optField({ label, help = null, value, focusKey, dir = null, list = null
           if (limit) limitInput(e.target, limit);
           e.target.removeAttribute("aria-invalid");
           error.textContent = "";
+          if (warning) warning.textContent = "";
         },
         onchange: (e) => run(e.target),
         onkeydown: (e) => {
@@ -822,6 +833,7 @@ function optField({ label, help = null, value, focusKey, dir = null, list = null
     ),
     help ? h("div", { class: "note", id: helpId }, help) : null,
     error,
+    warning,
   ];
 }
 
@@ -1647,6 +1659,8 @@ class EspEditor extends HTMLElement {
         dir: "ltr",
         list: "esp-entities",
         placeholder: field === "badge" ? "sensor.open_windows" : "binary_sensor.alarm",
+        // Saving stays allowed: the entity may come back (an integration that is off).
+        warn: (v) => (L.unknownEntity(v, this.hass?.states) ? t(lang, "entityMissing") : ""),
         commit: (input) => this.actions.setItem(ikey, field, input.value),
       });
     parts.push(

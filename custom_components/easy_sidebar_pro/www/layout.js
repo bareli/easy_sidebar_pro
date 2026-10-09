@@ -177,6 +177,12 @@ export function linkAt(links, pathname) {
 const ENTITY_RE = /^[a-z0-9_]{1,64}\.[a-z0-9_]{1,255}$/;
 export const validEntity = (value) => typeof value === "string" && ENTITY_RE.test(value);
 
+/** A typed entity id that is well formed but not one of Home Assistant's states (a warning, not an error: UX-010). */
+export function unknownEntity(value, states) {
+  const id = String(value ?? "").trim().toLowerCase();
+  return validEntity(id) && !Object.prototype.hasOwnProperty.call(states ?? {}, id);
+}
+
 /** Search words as stored: control characters dropped, spaces collapsed, at most MAX_ALIASES characters (code points). */
 export function cleanAliases(value) {
   const text = String(value ?? "")

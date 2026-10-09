@@ -80,6 +80,7 @@ the same layout to every user who has not made their own.
   - **Show only while this entity is on**: the item (or the whole group) appears only while the entity is on,
     open or above 0, for example an "Alarm" group only while `input_boolean.alarm` is on.
   - **Search words**: other names the search box finds the item by.
+  - The editor warns under the field when an entity does not exist in Home Assistant (it still saves).
 - **Search box** (editor, **Display options**, off by default): type part of a name at the top of the sidebar to
   see only the items whose names contain it (any case), with their groups unfolded. It also finds Home
   Assistant's own English names of built-in panels (type "his" for History in any language), links by name or

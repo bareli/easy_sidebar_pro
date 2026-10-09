@@ -159,6 +159,33 @@ test("#61 a rail group gets an <ha-tooltip for=row id> sibling with its full nam
   assert.match(SRC, /setAttr\(this\._row, "aria-label", `\$\{row\.name\}, \$\{count\}\$\{said\}`\);/);
 });
 
+/* ---- #52 UX-010: warn about an entity that does not exist; saving stays allowed ---- */
+
+test("#52 unknownEntity: a well-formed id missing from hass.states", () => {
+  const states = { "binary_sensor.door": { state: "on" }, "counter.open_windows": { state: "2" } };
+  assert.equal(L.unknownEntity("input_boolean.alrm", states), true);
+  assert.equal(L.unknownEntity(" Binary_Sensor.Door ", states), false);
+  assert.equal(L.unknownEntity("counter.open_windows", states), false);
+  // empty or malformed: no warning (the format error covers it)
+  assert.equal(L.unknownEntity("", states), false);
+  assert.equal(L.unknownEntity("not an id", states), false);
+  assert.equal(L.unknownEntity("toString", {}), false);
+  assert.equal(L.unknownEntity("a.constructor", {}), true);
+  assert.equal(L.unknownEntity("sensor.x", undefined), true);
+});
+
+test("#52 entity fields show a role=status warning (not aria-invalid), described by the input; save not blocked", () => {
+  assert.match(EN, /\n {4}entityMissing: "This entity does not exist in Home Assistant\.",/);
+  assert.match(HE, /\n {4}entityMissing: "הישות הזו לא קיימת ב-Home Assistant\.",/);
+  assert.match(SRC, /const warning = warn \? h\("div", \{ class: "warning", id: warnId, role: "status" \}/);
+  assert.match(SRC, /"aria-describedby": \[errId, warnId, helpId\]\.filter\(Boolean\)\.join\(" "\),/);
+  assert.match(SRC, /if \(warning\) warning\.textContent = message \? "" : warn\(input\.value\);/);
+  assert.match(SRC, /warn: \(v\) => \(L\.unknownEntity\(v, this\.hass\?\.states\) \? t\(lang, "entityMissing"\) : ""\),/);
+  // the warning never enters optErrors (which is what blocks Done)
+  const fn = SRC.slice(SRC.indexOf("function optField("), SRC.indexOf("class EspEditor"));
+  assert.doesNotMatch(fn, /errors\?\.set\([^)]*warn/);
+});
+
 /* ---- #62 UX-020: the hint says where the search box is ---- */
 
 test("#62 the editor hint ends with where to turn on the search box", () => {
