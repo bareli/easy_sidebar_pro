@@ -34,3 +34,36 @@ test("#40 HA's default orange mixed 60% with black: white 4.5:1, dot 3:1 on ligh
   assert.ok(L.contrast(fill, [250, 250, 250]) >= 3);
   assert.ok(L.contrast(fill, [28, 28, 28]) >= 3);
 });
+
+/* ---- #55 UX-013: home network hosts get http://, internet names https:// ---- */
+
+test("#55 local hosts (IPv4, localhost, LAN suffixes, one-word host, any port) get http://", () => {
+  for (const [typed, want] of [
+    ["192.168.1.251:5000", "http://192.168.1.251:5000"],
+    ["192.168.1.251", "http://192.168.1.251"],
+    ["10.0.0.1/admin", "http://10.0.0.1/admin"],
+    ["localhost", "http://localhost"],
+    ["localhost:8123/x", "http://localhost:8123/x"],
+    ["nas.local", "http://nas.local"],
+    ["router.lan", "http://router.lan"],
+    ["printer.home", "http://printer.home"],
+    ["box.internal/x", "http://box.internal/x"],
+    ["nas.home.arpa", "http://nas.home.arpa"],
+    ["nas:5000", "http://nas:5000"],
+    ["synology:5001/", "http://synology:5001/"],
+    ["example.com:8080", "http://example.com:8080"],
+  ])
+    assert.equal(L.normalizeUrl(typed), want, typed);
+});
+
+test("#55 internet names get https://; a bare word stays a Home Assistant page", () => {
+  assert.equal(L.normalizeUrl("example.com"), "https://example.com");
+  assert.equal(L.normalizeUrl("www.example.co.il/a?b=1"), "https://www.example.co.il/a?b=1");
+  assert.equal(L.normalizeUrl("nas"), "/nas");
+  assert.equal(L.normalizeUrl("config/automation"), "/config/automation");
+  assert.equal(L.normalizeUrl("lovelace/0"), "/lovelace/0");
+  // typed schemes are kept, real non-web schemes refused
+  assert.equal(L.normalizeUrl("https://nas.local:5001"), "https://nas.local:5001");
+  assert.equal(L.normalizeUrl("http://example.com"), "http://example.com");
+  for (const bad of ["tel:12345", "sms:12345", "mailto:a@b.com", "javascript:alert(1)"]) assert.equal(L.normalizeUrl(bad), null, bad);
+});

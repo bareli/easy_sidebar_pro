@@ -50,7 +50,7 @@ test("addresses: same rules as layout.py, and what a user types is normalised", 
   for (const bad of ["", "//evil.com", "/\\evil", "javascript:alert(1)", "data:text/html,x", "https://", "/a b", "ftp://x", "x".repeat(2001), "/a​b"]) assert.ok(!L.validUrl(bad), bad);
   assert.equal(L.normalizeUrl("config/automation"), "/config/automation");
   assert.equal(L.normalizeUrl("  www.example.com "), "https://www.example.com");
-  assert.equal(L.normalizeUrl("192.168.1.251:5000"), "https://192.168.1.251:5000");
+  assert.equal(L.normalizeUrl("192.168.1.251:5000"), "http://192.168.1.251:5000");
   assert.equal(L.normalizeUrl("http://ha.local:8123/map", "http://ha.local:8123"), "/map");
   assert.equal(L.normalizeUrl("javascript:alert(1)"), null);
   assert.equal(L.normalizeUrl(""), null);

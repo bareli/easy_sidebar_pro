@@ -65,16 +65,16 @@ test("#44 name, address and search word fields use the code point limiter, not m
 
 /* ---- #46 BUG-022: host with a port typed without a scheme ---- */
 
-test("#46 a host name with a port gets https:// like a domain or an IP", () => {
+test("#46 a host name with a port is an address, not a scheme (http:// on the home network since #55)", () => {
   for (const [typed, want] of [
-    ["nas.local:5000", "https://nas.local:5000"],
-    ["homeassistant.local:8123", "https://homeassistant.local:8123"],
-    ["homeassistant.local:8123/x", "https://homeassistant.local:8123/x"],
-    ["my-nas.lan:5000", "https://my-nas.lan:5000"],
-    ["192.168.1.251:5000", "https://192.168.1.251:5000"],
-    ["localhost:8123", "https://localhost:8123"],
-    ["nas.local:5000?a=1", "https://nas.local:5000?a=1"],
-    ["nas.local", "https://nas.local"],
+    ["nas.local:5000", "http://nas.local:5000"],
+    ["homeassistant.local:8123", "http://homeassistant.local:8123"],
+    ["homeassistant.local:8123/x", "http://homeassistant.local:8123/x"],
+    ["my-nas.lan:5000", "http://my-nas.lan:5000"],
+    ["192.168.1.251:5000", "http://192.168.1.251:5000"],
+    ["localhost:8123", "http://localhost:8123"],
+    ["nas.local:5000?a=1", "http://nas.local:5000?a=1"],
+    ["nas.local", "http://nas.local"],
   ])
     assert.equal(L.normalizeUrl(typed), want, typed);
 });

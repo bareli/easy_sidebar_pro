@@ -68,7 +68,10 @@ the same layout to every user who has not made their own.
   (`/config/automation`, `/lovelace/cameras`, `/config/integrations`...) or a web address (your router, NAS,
   `https://...`). Give it a name and an icon; it can be grouped, pinned and be a tab like any other item. Web
   addresses open in a new browser tab; a Home Assistant page can too (an option). A link to a page is
-  highlighted while that page is open.
+  highlighted while that page is open. Typed without `http://` or `https://`, a home network address
+  (`192.168.1.251:5000`, `nas.local`, `router.lan`, `localhost`, any address with a port) gets `http://`, other
+  web names (`example.com`) get `https://`, and a single word (`energy`) is a Home Assistant page (`/energy`); the
+  field shows the result.
 - **More options per item** (the ⋮ button on each row in the editor, and **More** on a group):
   - **Move to**: put the item into a group, back to the top level or into the pinned area, without dragging.
   - **Badge**: an entity whose number shows on the item, like Home Assistant's update count on Settings (for

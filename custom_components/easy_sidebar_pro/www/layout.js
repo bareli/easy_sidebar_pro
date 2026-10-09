@@ -122,19 +122,35 @@ export function validUrl(value) {
 }
 export const isExternal = (url) => /^https?:\/\//i.test(url ?? "");
 
+// A host name at the start of typed text, with an optional port ("nas.local:5000", "example.com/x").
+const HOST_START = /^([a-z0-9-]+(?:\.[a-z0-9-]+)*)(:\d{1,5})?(?=[/?#]|$)/i;
+const IPV4 = /^\d{1,3}(?:\.\d{1,3}){3}$/;
+// Home network names: plain http (a NAS or a router on the LAN has no certificate for https).
+const LOCAL_SUFFIX = /\.(?:local|lan|home|internal|home\.arpa)$/i;
+// "tel:12345" looks like a one-word host with a port; these are schemes, never hosts.
+const NOT_HOSTS = new Set(["tel", "sms", "mailto", "fax", "callto", "sip", "sips", "geo", "urn", "news", "javascript", "vbscript", "data", "file", "blob", "about", "ftp", "ws", "wss", "http", "https"]);
+
+/** Whether a host typed without a scheme is on the home network (UX-013): IPv4, localhost, a one-word name, a LAN suffix, or any host with a port. */
+export const localHost = (host, port = false) =>
+  !!port || IPV4.test(host) || !host.includes(".") || host.toLowerCase() === "localhost" || LOCAL_SUFFIX.test(host);
+
 /**
  * What a user typed as an address, normalised: trimmed; "config/automation" -> "/config/automation";
- * "example.com" -> "https://example.com"; a full address of this Home Assistant -> its path.
- * Returns null when it is not a usable address.
+ * a home network host ("192.168.1.251:5000", "nas.local", "localhost:8123") -> "http://..."; another host name
+ * ("example.com") -> "https://..."; a bare word without a dot or a port ("nas") stays a page of this Home Assistant
+ * ("/nas"); a full address of this Home Assistant -> its path. Returns null when it is not a usable address.
  */
-const HOST_PORT = /^(?:localhost|[a-z0-9-]+(?:\.[a-z0-9-]+)+):\d{1,5}(?:[/?#]|$)/i;
 export function normalizeUrl(value, origin = null) {
   let text = stripSurrogates(String(value ?? "")).trim();
   if (!text) return null;
   if (origin && text.toLowerCase().startsWith(origin.toLowerCase())) text = text.slice(origin.length) || "/";
-  // "nas.local:5000", "localhost:8123/x": a host with a port, not a scheme (a scheme may contain dots).
-  if (HOST_PORT.test(text)) text = `https://${text}`;
-  else if (!text.startsWith("/") && !/^[a-z][a-z0-9+.-]*:/i.test(text)) text = /^[^/\s]+\.[a-z]{2,}(?:[:/?#]|$)/i.test(text) || /^\d+\.\d+\.\d+\.\d+/.test(text) ? `https://${text}` : `/${text}`;
+  const host = text.startsWith("/") ? null : HOST_START.exec(text);
+  if (host && !(host[2] && NOT_HOSTS.has(host[1].toLowerCase()))) {
+    const [, name, port] = host;
+    const isHost = !!port || name.toLowerCase() === "localhost" || IPV4.test(name) || /\.[a-z]{2,}$/i.test(name);
+    if (isHost) text = `${localHost(name, port) ? "http" : "https"}://${text}`;
+    else text = `/${text}`;
+  } else if (!text.startsWith("/") && !/^[a-z][a-z0-9+.-]*:/i.test(text)) text = `/${text}`;
   return validUrl(text) ? text : null;
 }
 
