@@ -124,6 +124,25 @@ test("#57 handle, eye and ⋮ are 44 px on narrow screens; the controller marks 
   assert.match(SRC, /setFlag\(this\.editor, "narrow", this\.sb\.hasAttribute\("narrow"\)\);\n\s+return \[this\.editor\];/);
 });
 
+/* ---- #59 UX-017: link icon chips ---- */
+
+test("#59 link icons: the groups' suggestions plus link-type icons, every one a valid icon", () => {
+  const list = SRC.match(/const LINK_ICONS = \[\.\.\.new Set\(\[([^\]]*), \.\.\.SUGGESTED_ICONS\]\)\];/);
+  assert.ok(list, "LINK_ICONS built from SUGGESTED_ICONS");
+  const extra = [...list[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+  for (const icon of ["mdi:router-wireless", "mdi:nas", "mdi:web", "mdi:robot", "mdi:cog", "mdi:link-variant"]) assert.ok(extra.includes(icon), icon);
+  for (const icon of extra) assert.ok(L.validIcon(icon), icon);
+});
+
+test("#59 a link chip fills the icon field and commits it through the field (no re-render); pressed state patched in place", () => {
+  const opts = SRC.slice(SRC.indexOf("  optionsPanel(key) {"), SRC.indexOf("  /** A link's name or icon changed"));
+  assert.match(opts, /LINK_ICONS\.map\(\(icon\) =>/);
+  assert.match(opts, /"data-link-chip": id,/);
+  assert.match(opts, /input\.value = icon;\n\s+input\.dispatchEvent\(new Event\("change"\)\);/);
+  assert.doesNotMatch(opts.slice(opts.indexOf("LINK_ICONS.map")), /^\s{0,20}this\.set\(/m);
+  assert.match(SRC, /for \(const chip of this\.shadowRoot\.querySelectorAll\(`\[data-link-chip="\$\{CSS\.escape\(id\)\}"\]`\)\)\n\s+chip\.setAttribute\("aria-pressed", String\(chip\.getAttribute\("aria-label"\) === own\)\);/);
+});
+
 /* ---- #62 UX-020: the hint says where the search box is ---- */
 
 test("#62 the editor hint ends with where to turn on the search box", () => {

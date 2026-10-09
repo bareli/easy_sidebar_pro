@@ -69,6 +69,8 @@ const SUGGESTED_ICONS = [
   "mdi:shield-home", "mdi:camera", "mdi:chart-line", "mdi:calendar-month", "mdi:tools", "mdi:cog",
   "mdi:star", "mdi:account-group", "mdi:car", "mdi:flower", "mdi:television", "mdi:teddy-bear", "mdi:lightbulb-on", "mdi:water",
 ];
+// A link's suggested icons (UX-017): link-type icons first, then the groups' suggestions.
+const LINK_ICONS = [...new Set(["mdi:link-variant", "mdi:web", "mdi:router-wireless", "mdi:nas", "mdi:robot", "mdi:cog", ...SUGGESTED_ICONS])];
 const LIST_KEYS = new Set(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Home", "End", "PageUp", "PageDown", "Enter", " "]);
 
 const STRINGS = {
@@ -1576,6 +1578,32 @@ class EspEditor extends HTMLElement {
           placeholder: DEFAULT_LINK_ICON,
           commit: (input) => this.actions.setLink(id, "icon", input.value),
         }),
+        // Tappable suggestions, like a group's: a tap fills the field and commits it (no re-render).
+        h(
+          "div",
+          { class: "chips" },
+          LINK_ICONS.map((icon) =>
+            h(
+              "button",
+              {
+                class: "icon-btn chip",
+                type: "button",
+                "aria-label": icon,
+                title: icon,
+                "aria-pressed": String(link.icon === icon),
+                "data-link-chip": id,
+                "data-focus-key": `lchip:${id}:${icon}`,
+                onclick: () => {
+                  const input = this._q(`[data-focus-key="${CSS.escape(fk("icon"))}"]`);
+                  if (!input) return;
+                  input.value = icon;
+                  input.dispatchEvent(new Event("change"));
+                },
+              },
+              iconEl(icon),
+            ),
+          ),
+        ),
         h(
           "label",
           { class: "check" },
@@ -1659,6 +1687,9 @@ class EspEditor extends HTMLElement {
     if (title && title.textContent !== info.title) title.textContent = info.title;
     const icon = row.querySelector("ha-icon.icon");
     if (icon) icon.icon = info.icon;
+    const own = this.meta?.links?.[id]?.icon ?? null;
+    for (const chip of this.shadowRoot.querySelectorAll(`[data-link-chip="${CSS.escape(id)}"]`))
+      chip.setAttribute("aria-pressed", String(chip.getAttribute("aria-label") === own));
     for (const [sel, text] of [
       [".handle", t(this.lang, "drag", { name: info.title })],
       [".more", t(this.lang, "options", { name: info.title })],
