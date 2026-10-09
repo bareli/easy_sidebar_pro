@@ -79,8 +79,9 @@ test("folding ignores tabbed groups (accordion, collapse all)", () => {
 });
 
 test("sidebar row: a link, current while one of its tabs is open; no count or chevron", () => {
-  assert.match(SRC, /this\._row\.setAttribute\("role", tabbed \? "link" : "button"\);/);
-  assert.match(SRC, /this\._row\.setAttribute\("aria-current", "page"\)/);
+  // Written through the on-change helper since PERF-004 (#49).
+  assert.match(SRC, /setAttr\(this\._row, "role", tabbed \? "link" : "button"\);/);
+  assert.match(SRC, /setAttr\(this\._row, "aria-current", row\.selected \? "page" : null\)/);
   assert.match(SRC, /:host\(\[tabbed\]\) \.count, :host\(\[tabbed\]\) \.chev \{ display: none; \}/);
 });
 
@@ -97,11 +98,15 @@ test("editor: a pressed toggle per group, read from the current tree; he + en", 
 
 test("tab strip: links (modified clicks stay the browser's), styles on the resolver are undone", () => {
   assert.match(SRC, /customElements\.define\("esp-tabs", EspTabs\)/);
-  assert.match(SRC, /href: `\/\$\{tab\.path\}`/);
-  assert.match(SRC, /if \(e\.button !== 0 \|\| e\.metaKey \|\| e\.ctrlKey \|\| e\.shiftKey \|\| e\.altKey\) return;/);
-  assert.match(SRC, /for \(const k of Object\.keys\(RESOLVER_STYLE\)\) this\.tabsRes\.style\.removeProperty\(k\);/);
-  for (const key of ["display", "transform", "--ha-sidebar-width", "--ha-top-app-bar-width", "--safe-area-inset-top"])
-    assert.ok(SRC.includes(`${key.startsWith("--") ? `"${key}"` : key}: `), key);
+  assert.match(SRC, /href: `\/\$\{path\}`, newTab: false/);
+  assert.match(SRC, /if \(tab\.newTab \|\| e\.button !== 0 \|\| e\.metaKey \|\| e\.ctrlKey \|\| e\.shiftKey \|\| e\.altKey\) return;/);
+  assert.match(SRC, /for \(const k of Object\.keys\(\{ \.\.\.RESOLVER_STYLE, \.\.\.RESOLVER_STYLE_BOTTOM \}\)\) this\.tabsRes\.style\.removeProperty\(k\);/);
+  // v0.5: no transform on the resolver (it made the header and the strip scroll away on long pages); the
+  // strip's height is added to HA's own safe-area insets, read through --esp-inset-* on the drawer.
+  assert.match(SRC, /const RESOLVER_STYLE = \{ "--safe-area-inset-top": `calc\(var\(--esp-inset-top, 0px\) \+ \$\{TABS_HEIGHT\}px\)` \};/);
+  assert.match(SRC, /const RESOLVER_STYLE_BOTTOM = \{ "--safe-area-inset-bottom": `calc\(var\(--esp-inset-bottom, 0px\) \+ \$\{TABS_HEIGHT\}px\)` \};/);
+  assert.ok(!/transform: "translateZ\(0\)"/.test(SRC));
+  assert.match(SRC, /for \(const k of Object\.keys\(DRAWER_STYLE\)\) this\.tabsDrawer\?\.style\.removeProperty\(k\);/);
   assert.match(SRC, /disconnect\(\) \{\r?\n {4}this\.clearTabs\(\);/);
 });
 

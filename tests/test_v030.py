@@ -29,7 +29,7 @@ def test_full_layout_is_normalised():
     assert out["groups"]["home"]["icon_color"] == "teal"
     assert out["grid"] == ["energy", "logbook"]
     assert out["settings"] == FULL["settings"]
-    assert list(out) == ["version", "order", "groups", "grid", "settings"]
+    assert list(out) == ["version", "order", "groups", "grid", "settings", "links", "items"]
 
 
 def test_old_layout_gets_defaults():

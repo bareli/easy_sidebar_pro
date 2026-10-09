@@ -62,10 +62,26 @@ the same layout to every user who has not made their own.
   Clicking it opens the group's first item (or the one last open in this page) with a bar of tabs above the
   page, one per item of the group. The pages are Home Assistant's own, unchanged; the group's row is
   highlighted while any of them is open. A dashboard with several views keeps its own view tabs below the
-  bar. Hidden items are not tabs.
+  bar. Hidden items are not tabs. On phones (narrow screens) the tabs are a bar at the bottom of the screen.
+  The bar and the page's header stay in place while you scroll a long page.
+- **Links**: **Add link** in the editor adds an item that is not a Home Assistant panel: a page of Home Assistant
+  (`/config/automation`, `/lovelace/cameras`, `/config/integrations`...) or a web address (your router, NAS,
+  `https://...`). Give it a name and an icon; it can be grouped, pinned and be a tab like any other item. Web
+  addresses open in a new browser tab; a Home Assistant page can too (an option). A link to a page is
+  highlighted while that page is open.
+- **More options per item** (the ⋮ button on each row in the editor, and **More** on a group):
+  - **Move to**: put the item into a group, back to the top level or into the pinned area, without dragging.
+  - **Badge**: an entity whose number shows on the item, like Home Assistant's update count on Settings (for
+    example `sensor.open_windows`); an entity that is on, open or active shows a dot. A folded group, and a
+    tabs group, show their items' badges added up.
+  - **Show only while this entity is on**: the item (or the whole group) appears only while the entity is on,
+    open or above 0, for example an "Alarm" group only while `input_boolean.alarm` is on.
+  - **Search words**: other names the search box finds the item by.
 - **Search box** (editor, **Display options**, off by default): type part of a name at the top of the sidebar to
-  see only the items whose names contain it (any case), with their groups unfolded. A tabs group shows as
-  its one row if its name or any of its items match. Enter opens the first result, Escape clears.
+  see only the items whose names contain it (any case), with their groups unfolded. It also finds Home
+  Assistant's own English names of built-in panels (type "his" for History in any language), links by name or
+  address, an item's search words, and the views of your dashboards (shown as "View · Dashboard"). A tabs group
+  shows as its one row if its name or any of its items match. Enter opens the first result, Escape clears.
 - **No flicker**: groups are drawn as part of Home Assistant's own sidebar, not patched in afterwards.
 - **Touch and keyboard**: drag with a finger or a mouse. With the keyboard, focus a handle and press
   Alt + Up / Down; a screen reader hears where the row landed.

@@ -6,6 +6,10 @@ const L = await import(`./layout.js${new URL(import.meta.url).search}`);
 
 const DOMAIN = "easy_sidebar_pro";
 const ctrls = new WeakMap();
+// Controllers holding subscriptions and window listeners. ha-sidebar's connected / disconnected callbacks
+// cannot be patched (a custom element's lifecycle callbacks are read once, at define()), so a controller
+// whose sidebar left the page is let go when another sidebar appears or on its next location event (PERF-006).
+const live = new Set();
 // Whether HA's sidebar has the fixed-panel renderer the bottom grid draws into (feature detection).
 let gridSupported = false;
 
@@ -24,7 +28,15 @@ const ICONS = {
   search: "M9.5,3A6.5,6.5 0 0,1 16,9.5C16,11.11 15.41,12.59 14.44,13.73L14.71,14H15.5L20.5,19L19,20.5L14,15.5V14.71L13.73,14.44C12.59,15.41 11.11,16 9.5,16A6.5,6.5 0 0,1 3,9.5A6.5,6.5 0 0,1 9.5,3M9.5,5C7,5 5,7 5,9.5C5,12 7,14 9.5,14C12,14 14,12 14,9.5C14,7 12,5 9.5,5Z",
   close: "M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z",
   folderOpen: "M6.1,10L4,18V8H21A2,2 0 0,0 19,6H12L10,4H4A2,2 0 0,0 2,6V18A2,2 0 0,0 4,20H19C19.9,20 20.7,19.4 20.9,18.5L23.2,10H6.1M19,18H6L7.6,12H20.6L19,18Z",
+  more: "M12,16A2,2 0 0,1 14,18A2,2 0 0,1 12,20A2,2 0 0,1 10,18A2,2 0 0,1 12,16M12,10A2,2 0 0,1 14,12A2,2 0 0,1 12,14A2,2 0 0,1 10,12A2,2 0 0,1 12,10M12,4A2,2 0 0,1 14,6A2,2 0 0,1 12,8A2,2 0 0,1 10,6A2,2 0 0,1 12,4Z",
+  link: "M10.59,13.41C11,13.8 11,14.44 10.59,14.83C10.2,15.22 9.56,15.22 9.17,14.83C7.22,12.88 7.22,9.71 9.17,7.76V7.76L12.71,4.22C14.66,2.27 17.83,2.27 19.78,4.22C21.73,6.17 21.73,9.34 19.78,11.29L18.29,12.78C18.3,11.96 18.17,11.14 17.89,10.36L18.36,9.88C19.54,8.71 19.54,6.81 18.36,5.64C17.19,4.46 15.29,4.46 14.12,5.64L10.59,9.17C9.41,10.34 9.41,12.24 10.59,13.41M13.41,9.17C13.8,8.78 14.44,8.78 14.83,9.17C16.78,11.12 16.78,14.29 14.83,16.24V16.24L11.29,19.78C9.34,21.73 6.17,21.73 4.22,19.78C2.27,17.83 2.27,14.66 4.22,12.71L5.71,11.22C5.7,12.04 5.83,12.86 6.11,13.65L5.64,14.12C4.46,15.29 4.46,17.19 5.64,18.36C6.81,19.54 8.71,19.54 9.88,18.36L13.41,14.83C14.59,13.66 14.59,11.76 13.41,10.59C13,10.2 13,9.56 13.41,9.17Z",
+  delete: "M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z",
 };
+const DEFAULT_LINK_ICON = "mdi:link-variant";
+// A link row is HA's own panel row with this stand-in path (its id is "sidebar-panel-<LINK_ROW><id>"); its
+// address and target are set after each update.
+const LINK_ROW = "esp-link-";
+const VIEWS_TTL_MS = 300000;
 
 const PANEL_ICONS = {
   calendar: "mdi:calendar",
@@ -42,17 +54,16 @@ const GHOST_INSET = 24;
 const GHOST_GAP = 28;
 const ADOPT_SPREAD_MS = 1000;
 const TABS_HEIGHT = 48;
-// What the tab strip sets on HA's panel resolver. The transform makes it the containing block of the
-// panels' fixed headers, so they sit below the strip; the variables they place themselves with then
-// count from the resolver, not the window (sidebar width 0, full width, no top inset: the strip has it).
-const RESOLVER_STYLE = {
-  display: "block",
-  height: `calc(100% - ${TABS_HEIGHT}px - var(--safe-area-inset-top, 0px))`,
-  transform: "translateZ(0)",
-  "--ha-sidebar-width": "0px",
-  "--ha-top-app-bar-width": "100%",
-  "--safe-area-inset-top": "0px",
-};
+// What the tab strip sets on HA's panel resolver (v0.5). HA's panels place their fixed header below
+// --safe-area-inset-top and pad their content by it (and by --safe-area-inset-bottom at the end), so the
+// strip's height is added to that inset: the page keeps HA's own layout and window scrolling, its header
+// stays fixed, and the strip (sticky, in a layer above) covers exactly the added space. The real inset is
+// read through --esp-inset-*, set on the resolver's parent (a property cannot refer to itself).
+// v0.4 used a transform here, which made the header and the strip scroll away on long pages.
+const RESOLVER_STYLE = { "--safe-area-inset-top": `calc(var(--esp-inset-top, 0px) + ${TABS_HEIGHT}px)` };
+// The bottom bar (narrow screens): the page ends above it.
+const RESOLVER_STYLE_BOTTOM = { "--safe-area-inset-bottom": `calc(var(--esp-inset-bottom, 0px) + ${TABS_HEIGHT}px)` };
+const DRAWER_STYLE = { "--esp-inset-top": "var(--safe-area-inset-top, 0px)", "--esp-inset-bottom": "var(--safe-area-inset-bottom, 0px)" };
 const SUGGESTED_ICONS = [
   "mdi:home", "mdi:sofa", "mdi:bed", "mdi:silverware-fork-knife", "mdi:lightbulb-group", "mdi:thermometer",
   "mdi:shield-home", "mdi:camera", "mdi:chart-line", "mdi:calendar-month", "mdi:tools", "mdi:cog",
@@ -163,7 +174,33 @@ const STRINGS = {
     movedGroup: "{name}: in {group}, position {pos}",
     grouped: "Group created with {a} and {b}",
     nameRequired: "Enter a group name",
-    hint: "Drag a row onto another row to make a group. The eye button hides or shows an item.",
+    linkNameRequired: "Enter a link name",
+    hint: "Drag a row onto another row to make a group. The eye button hides or shows an item; the ⋮ button has more options.",
+    addLink: "Add link",
+    newLink: "New link",
+    options: "More options for {name}",
+    optMore: "More",
+    moveTo: "Move to",
+    moveTop: "Top level (no group)",
+    linkName: "Link name",
+    linkUrl: "Address",
+    linkUrlHelp: "A page of Home Assistant, for example /config/automation, or a web address, for example https://example.com",
+    linkUrlInvalid: "Enter a path starting with / or a web address starting with https://",
+    linkNewTab: "Open in a new browser tab",
+    linkNewTabHelp: "Web addresses always open in a new tab.",
+    linkIcon: "Link icon, for example mdi:link-variant",
+    optRemove: "Delete link",
+    removeLink: "Delete link {name}",
+    removed: "{name} deleted",
+    badge: "Badge entity",
+    badgeHelp: "Shows the entity's number, or a dot while it is on, open or active. A folded group adds up its items' badges.",
+    showWhen: "Show only while this entity is on",
+    showWhenHelp: "Empty: always shown. Off, closed, 0, unavailable: hidden.",
+    entityInvalid: "Use an entity id, for example binary_sensor.front_door",
+    aliases: "Search words",
+    aliasesHelp: "Other names the search box finds this by, for example its English name.",
+    badgeActive: "active",
+    viewOf: "{view} · {dash}",
   },
   he: {
     edit: "עריכת סרגל הצד",
@@ -267,7 +304,33 @@ const STRINGS = {
     movedGroup: "{name}: בקבוצה {group}, מקום {pos}",
     grouped: "נוצרה קבוצה עם {a} ועם {b}",
     nameRequired: "צריך שם לקבוצה",
-    hint: "גררו שורה אל שורה אחרת כדי ליצור קבוצה. כפתור העין מסתיר או מציג פריט.",
+    linkNameRequired: "צריך שם לקישור",
+    hint: "גררו שורה אל שורה אחרת כדי ליצור קבוצה. כפתור העין מסתיר או מציג פריט; בכפתור ⋮ יש אפשרויות נוספות.",
+    addLink: "הוספת קישור",
+    newLink: "קישור חדש",
+    options: "אפשרויות נוספות עבור {name}",
+    optMore: "עוד",
+    moveTo: "העברה אל",
+    moveTop: "הרמה העליונה (בלי קבוצה)",
+    linkName: "שם הקישור",
+    linkUrl: "כתובת",
+    linkUrlHelp: "דף של Home Assistant, למשל ‎/config/automation, או כתובת אינטרנט, למשל https://example.com",
+    linkUrlInvalid: "יש להזין נתיב שמתחיל ב-/ או כתובת אינטרנט שמתחילה ב-https://",
+    linkNewTab: "פתיחה בכרטיסייה חדשה בדפדפן",
+    linkNewTabHelp: "כתובות אינטרנט נפתחות תמיד בכרטיסייה חדשה.",
+    linkIcon: "סמל הקישור, למשל mdi:link-variant",
+    optRemove: "מחיקת הקישור",
+    removeLink: "מחיקת הקישור {name}",
+    removed: "{name} נמחק",
+    badge: "ישות לתג",
+    badgeHelp: "מציג את המספר של הישות, או נקודה כשהיא פעילה, פתוחה או דלוקה. קבוצה מקופלת מסכמת את התגים של הפריטים שבה.",
+    showWhen: "הצגה רק כשהישות הזו פעילה",
+    showWhenHelp: "ריק: מוצג תמיד. כבוי, סגור, 0 או לא זמין: מוסתר.",
+    entityInvalid: "יש להזין מזהה ישות, למשל binary_sensor.front_door",
+    aliases: "מילות חיפוש",
+    aliasesHelp: "שמות נוספים שתיבת החיפוש תמצא לפיהם, למשל השם באנגלית.",
+    badgeActive: "פעיל",
+    viewOf: "{view} · {dash}",
   },
 };
 
@@ -289,7 +352,7 @@ function h(tag, props = {}, ...children) {
     else if (k.startsWith(".")) el[k.slice(1)] = v;
     else el.setAttribute(k, v === true ? "" : v);
   }
-  for (const c of children.flat()) if (c !== null && c !== undefined && c !== false) el.append(c);
+  for (const c of children.flat(Infinity)) if (c !== null && c !== undefined && c !== false) el.append(c);
   return el;
 }
 
@@ -330,6 +393,50 @@ function setVar(el, name, value) {
   if (el.style.getPropertyValue(name) === want) return;
   if (want) el.style.setProperty(name, want);
   else el.style.removeProperty(name);
+}
+
+/** Set (or, for null, remove) an attribute only when it changes: a write of the same value is still a mutation (PERF-004). */
+function setAttr(el, name, value) {
+  if (value === null || value === undefined) {
+    if (el.hasAttribute(name)) el.removeAttribute(name);
+  } else if (el.getAttribute(name) !== value) el.setAttribute(name, value);
+}
+
+/** A boolean attribute, written only when it changes. */
+function setFlag(el, name, on) {
+  if (el.hasAttribute(name) !== on) el.toggleAttribute(name, on);
+}
+
+/** Text content, replaced only when it changes (each assignment replaces the text node). */
+function setText(el, text) {
+  if (el.textContent !== text) el.textContent = text;
+}
+
+/** The layout path of one of HA's sidebar rows: its panel path, or "l:<id>" for a link row. */
+function rowPath(item) {
+  const path = item.id.slice("sidebar-panel-".length);
+  return path.startsWith(LINK_ROW) ? L.linkPath(path.slice(LINK_ROW.length)) : path;
+}
+
+/**
+ * A badge on one of HA's rows, drawn like HA's own (Settings' update count): one span beside the icon for
+ * the icon-only rail, one at the end for the expanded sidebar (HA's CSS shows the right one). A dot
+ * (active, no number) carries hidden text, so screen readers hear it with the row's name.
+ */
+function setBadge(item, badge, lang) {
+  const spans = item.querySelectorAll(":scope > .esp-badge");
+  const sig = badge ? `${badge.count ?? "dot"}|${lang}` : "";
+  if ((spans[0]?.dataset.sig ?? "") === sig) return;
+  for (const s of spans) s.remove();
+  if (!badge) return;
+  const text = L.badgeText(badge);
+  const cls = `badge esp-badge${badge.count ? "" : " esp-dot"}`;
+  const icon = item.querySelector(':scope > [slot="start"]');
+  const start = h("span", { class: cls, slot: "start", "aria-hidden": "true", "data-sig": sig }, text);
+  const end = h("span", { class: cls, slot: "end", "data-sig": sig }, badge.count ? text : h("span", { class: "esp-sr" }, t(lang, "badgeActive")));
+  if (icon) icon.after(start);
+  else item.prepend(start);
+  item.append(end);
 }
 
 const panelTitle = (hass, panel) => hass.localize?.(`panel.${panel.title}`) || panel.title || panel.url_path;
@@ -386,6 +493,15 @@ const GROUP_CSS = `
 :host([tabbed]) .count, :host([tabbed]) .chev { display: none; }
 :host([tabbed][selected]) .row { box-shadow: inset 0 0 0 100vmax rgba(var(--rgb-primary-color, 3,169,244), 0.12); }
 @media (prefers-reduced-motion: reduce) { .chev { transition: none; } }
+/* Badge (v0.5): HA's own sidebar badge look; a dot for an active state without a number. */
+.row { position: relative; }
+.badge { flex: none; display: flex; align-items: center; justify-content: center; box-sizing: border-box; min-width: 20px; height: 20px; padding: 0 6px;
+  border-radius: 10px; background-color: var(--accent-color); color: var(--text-accent-color, var(--text-primary-color));
+  font-size: var(--ha-font-size-s, 12px); font-weight: normal; font-variant-numeric: tabular-nums; line-height: 1; }
+.badge[data-dot] { min-width: 0; width: 10px; height: 10px; padding: 0; border-radius: 50%; }
+.badge[hidden] { display: none; }
+:host([icon-only]) .badge { position: absolute; top: 4px; inset-inline-start: 26px; min-width: 16px; height: 16px; padding: 0 4px; font-size: 0.65em; border-radius: 8px; }
+:host([icon-only]) .badge[data-dot] { min-width: 0; width: 8px; height: 8px; padding: 0; top: 6px; inset-inline-start: 30px; }
 `;
 
 class EspGroup extends HTMLElement {
@@ -401,7 +517,8 @@ class EspGroup extends HTMLElement {
     this._icon = iconEl(DEFAULT_ICON);
     this._name = h("span", { class: "name" });
     this._count = h("span", { class: "count" });
-    this._row = h("div", { class: "row", part: "row", role: "button", tabindex: "-1" }, this._icon, this._name, this._count, svg(ICONS.chevron, "chev"));
+    this._badge = h("span", { class: "badge", hidden: true, "aria-hidden": "true" });
+    this._row = h("div", { class: "row", part: "row", role: "button", tabindex: "-1" }, this._icon, this._name, this._badge, this._count, svg(ICONS.chevron, "chev"));
     root.append(style, this._row);
     this.addEventListener("click", () => this.onToggle?.());
   }
@@ -423,6 +540,8 @@ class EspGroup extends HTMLElement {
   }
 
   /** look: { text, icon, bg, line, sub, sel, selIcon } CSS colours (null = theme default), header (L.HEADER_STYLES); hideCount drops the folded count (#36). */
+  // Every write is on change only: HA re-renders the sidebar on every state change, and an unchanged
+  // value written again still costs a style / layout pass (PERF-004).
   update(row, lang, iconOnly, rtl, look = null, header = "plain", hideCount = false) {
     setVar(this, "--esp-own-color", look?.text);
     setVar(this, "--esp-own-icon-color", look?.icon);
@@ -431,31 +550,39 @@ class EspGroup extends HTMLElement {
     setVar(this, "--esp-own-sub", look?.sub);
     setVar(this, "--esp-own-sel", look?.sel);
     setVar(this, "--esp-own-sel-icon", look?.selIcon);
-    if (this.getAttribute("header") !== header) this.setAttribute("header", header);
-    this._icon.icon = row.icon || DEFAULT_ICON;
-    this._name.textContent = row.name;
+    setAttr(this, "header", header);
+    const icon = row.icon || DEFAULT_ICON;
+    if (this._icon.icon !== icon) this._icon.icon = icon;
+    setText(this._name, row.name);
     const tabbed = row.tabbed === true;
     const collapsed = !tabbed && row.collapsed;
     const count = row.count === 1 ? t(lang, "items1") : t(lang, "items", { n: row.count });
-    this._count.textContent = collapsed && !hideCount ? String(row.count) : "";
-    this.toggleAttribute("tabbed", tabbed);
-    this.toggleAttribute("collapsed", collapsed);
-    this.toggleAttribute("selected", (tabbed || collapsed) && row.selected);
-    this.toggleAttribute("icon-only", iconOnly);
-    this.toggleAttribute("rtl", rtl);
+    setText(this._count, collapsed && !hideCount ? String(row.count) : "");
+    setFlag(this, "tabbed", tabbed);
+    setFlag(this, "collapsed", collapsed);
+    setFlag(this, "selected", (tabbed || collapsed) && !!row.selected);
+    setFlag(this, "icon-only", !!iconOnly);
+    setFlag(this, "rtl", !!rtl);
+    // The badge is drawn here and read as part of the row's name (the visible one is aria-hidden).
+    const badge = row.badge ?? null;
+    const badgeText = L.badgeText(badge);
+    setFlag(this._badge, "hidden", !badge);
+    setFlag(this._badge, "data-dot", !!badge && !badge.count);
+    setText(this._badge, badgeText);
+    const said = badge ? `, ${badge.count ? badgeText : t(lang, "badgeActive")}` : "";
     // A tabbed group opens a page (a link, current while one of its tabs is open); others fold.
-    this._row.setAttribute("role", tabbed ? "link" : "button");
+    setAttr(this._row, "role", tabbed ? "link" : "button");
     if (tabbed) {
-      this._row.removeAttribute("aria-expanded");
-      this._row.setAttribute("aria-label", row.name);
-      if (row.selected) this._row.setAttribute("aria-current", "page");
-      else this._row.removeAttribute("aria-current");
+      setAttr(this._row, "aria-expanded", null);
+      setAttr(this._row, "aria-label", `${row.name}${said}`);
+      setAttr(this._row, "aria-current", row.selected ? "page" : null);
     } else {
-      this._row.removeAttribute("aria-current");
-      this._row.setAttribute("aria-expanded", String(!row.collapsed));
-      this._row.setAttribute("aria-label", `${row.name}, ${count}`);
+      setAttr(this._row, "aria-current", null);
+      setAttr(this._row, "aria-expanded", String(!row.collapsed));
+      setAttr(this._row, "aria-label", `${row.name}, ${count}${said}`);
     }
-    this.title = iconOnly ? row.name : "";
+    const title = iconOnly ? row.name : "";
+    if (this.title !== title) this.title = title;
   }
 }
 
@@ -471,8 +598,12 @@ const EDITOR_CSS = `
   --esp-action-color: color-mix(in srgb, var(--primary-color) 60%, var(--primary-text-color, #212121));
   --esp-fill-color: var(--primary-color);
   --esp-fill-color: color-mix(in srgb, var(--primary-color) 65%, black);
+  /* Own fill for the danger button: white text stays >= 4.5:1 although --esp-error-color is lightened in dark themes, BUG-024. */
+  --esp-danger-fill: var(--error-color, #db4437);
+  --esp-danger-fill: color-mix(in srgb, var(--error-color, #db4437) 70%, black);
   --esp-error-color: var(--error-color, #db4437);
-  --esp-error-color: color-mix(in srgb, var(--error-color, #db4437) 75%, var(--primary-text-color, #212121)); }
+  /* 70%: 4.5:1 also on the lighter options panel in dark themes (secondary-background-color), BUG-019. */
+  --esp-error-color: color-mix(in srgb, var(--error-color, #db4437) 70%, var(--primary-text-color, #212121)); }
 .handle, .row .title, .bar-title, .note { user-select: none; -webkit-user-select: none; }
 .bar { position: sticky; top: 0; z-index: 2; background: var(--sidebar-background-color, var(--card-background-color));
   display: flex; flex-direction: column; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--divider-color); }
@@ -539,7 +670,7 @@ button { font: inherit; color: inherit; }
 .footer-section + .footer-section { border-top: 1px solid var(--divider-color); margin-top: 6px; padding-top: 8px; }
 .footer-heading { color: var(--secondary-text-color); font-size: var(--ha-font-size-s, 12px); font-weight: var(--ha-font-weight-medium, 500); }
 .confirm { display: flex; flex-direction: column; gap: 8px; padding: 8px; border: 1px solid var(--divider-color); border-radius: 8px; line-height: 1.4; }
-.btn.danger { background: var(--esp-error-color); border-color: var(--esp-error-color); color: #fff; }
+.btn.danger { background: var(--esp-danger-fill); border-color: var(--esp-danger-fill); color: #fff; }
 .group[data-color] { border-inline-start: 4px solid var(--esp-own-line); }
 .group > .row.head .icon { color: var(--esp-own-icon-color, var(--sidebar-icon-color, var(--secondary-text-color))); }
 .sub { color: var(--secondary-text-color); font-size: var(--ha-font-size-s, 12px); font-weight: var(--ha-font-weight-medium, 500); margin-top: 4px; }
@@ -588,7 +719,86 @@ button { font: inherit; color: inherit; }
   border-radius: 6px; min-height: 36px; padding: 0 6px; }
 .check input:focus-visible, .field select:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 1px; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+/* v0.5: add group / add link side by side; the ⋮ options of a row (move to, link fields, badge, condition, search words). */
+.adds { display: flex; gap: 8px; margin: 8px 8px 6px; }
+.adds .add { margin: 0; width: auto; flex: 1; min-width: 0; }
+.more[aria-expanded="true"] { background: rgba(var(--rgb-primary-color, 3,169,244), 0.18); color: var(--esp-action-color); }
+.row-opts { display: flex; flex-direction: column; gap: 8px; margin: 2px 6px 8px; padding: 8px 10px; border: 1px solid var(--divider-color); border-radius: 8px;
+  background: var(--secondary-background-color, rgba(127,127,127,0.06)); }
+.children .row-opts { margin-inline-start: 20px; }
+.row-opts .field input[type="text"], .row-opts .field input:not([type]) { font: inherit; color: inherit; background: var(--card-background-color, transparent);
+  border: 1px solid var(--secondary-text-color); border-radius: 6px; padding: 6px; min-width: 0; }
+.row-opts .field input[aria-invalid="true"] { border-color: var(--esp-error-color); }
+.row-opts .field input:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 1px; }
+.row-opts .note { margin-top: -4px; }
+.row-opts .check + .note { margin: -8px 0 0; }
+.btn.remove { align-self: flex-start; display: inline-flex; gap: 6px; align-items: center; color: var(--esp-error-color); border-color: var(--esp-error-color); }
+.btn.remove svg { width: 18px; height: 18px; fill: currentColor; }
+.row.link .title { font-style: italic; }
 `;
+
+/**
+ * Keep a text field within `max` code points, as the server counts (`maxlength` counts UTF-16 units, so it
+ * allowed 25 emoji where the server takes 50 and could leave half an emoji). The caret stays after the kept text.
+ */
+function limitInput(input, max) {
+  const { value, caret } = L.limitText(input.value, input.selectionStart, max);
+  if (value === input.value) return;
+  input.value = value;
+  input.setSelectionRange?.(caret, caret);
+}
+
+/**
+ * One labelled text field of the ⋮ options: commits on Enter or when it loses focus; `commit` returns an error text or "".
+ * `errors` (focus key -> { row, value, message }) keeps a refused value and its message across re-renders, so Done can
+ * refuse while a field is in error (BUG-021); `row` is the layout key of the row the options belong to.
+ */
+function optField({ label, help = null, value, focusKey, dir = null, list = null, limit = null, placeholder = null, errors = null, row = null, commit }) {
+  const errId = `err-${focusKey.replace(/[^A-Za-z0-9_-]/g, "_")}`;
+  const helpId = help ? `help-${errId}` : null;
+  const pending = errors?.get(focusKey);
+  const error = h("div", { class: "error", id: errId, role: "alert" }, pending?.message ?? null);
+  const run = (input) => {
+    const message = commit(input);
+    if (message) input.setAttribute("aria-invalid", "true");
+    else input.removeAttribute("aria-invalid");
+    error.textContent = message || "";
+    if (message) errors?.set(focusKey, { row, value: input.value, message });
+    else errors?.delete(focusKey);
+  };
+  return [
+    h(
+      "label",
+      { class: "field" },
+      h("span", {}, label),
+      h("input", {
+        type: "text",
+        dir,
+        list,
+        placeholder,
+        spellcheck: "false",
+        autocomplete: "off",
+        "aria-describedby": [errId, helpId].filter(Boolean).join(" "),
+        "aria-invalid": pending ? "true" : null,
+        "data-focus-key": focusKey,
+        ".value": pending ? pending.value : value ?? "",
+        oninput: (e) => {
+          if (limit) limitInput(e.target, limit);
+          e.target.removeAttribute("aria-invalid");
+          error.textContent = "";
+        },
+        onchange: (e) => run(e.target),
+        onkeydown: (e) => {
+          if (e.key !== "Enter") return;
+          e.preventDefault();
+          run(e.target);
+        },
+      }),
+    ),
+    help ? h("div", { class: "note", id: helpId }, help) : null,
+    error,
+  ];
+}
 
 class EspEditor extends HTMLElement {
   constructor() {
@@ -634,6 +844,11 @@ class EspEditor extends HTMLElement {
     this.iconEditing = null;
     // Group id -> what the user left in a name field that is not a valid name (shown with its error).
     this.nameErrors = new Map();
+    // ⋮ option fields left in error (focus key -> { row, value, message }); Done refuses while any is.
+    this.optErrors = new Map();
+    // The row whose ⋮ options are open (one at a time), and the entity ids its fields suggest.
+    this.optionsOpen = null;
+    this._entities = h("datalist", { id: "esp-entities" }, (opts.entities ?? []).map((e) => h("option", { value: e })));
     this.render();
     requestAnimationFrame(() => this.shadowRoot.querySelector(".bar .btn")?.focus());
   }
@@ -653,7 +868,21 @@ class EspEditor extends HTMLElement {
     const at = L.locate(this.tree, key);
     if (!at) return "";
     if (L.isPins(at.node)) return t(this.lang, "pinned");
-    return at.node.type === "group" ? at.node.name : this.info.get(at.node.path)?.title ?? at.node.path;
+    return at.node.type === "group" ? at.node.name : this.infoOf(at.node.path).title;
+  }
+
+  /** Title and icon of a panel or link row. */
+  infoOf(path) {
+    if (L.isLink(path)) {
+      const link = this.meta?.links?.[L.linkId(path)];
+      return { title: link?.name || t(this.lang, "newLink"), icon: link?.icon || DEFAULT_LINK_ICON, iconPath: null };
+    }
+    return this.info.get(path) ?? { title: path, icon: null, iconPath: null };
+  }
+
+  /** An entry's extras as edited (layout key: panel path, "l:<id>" or "g:<id>"). */
+  item(key) {
+    return this.meta?.items?.[key] ?? {};
   }
 
   _q(selector) {
@@ -685,6 +914,8 @@ class EspEditor extends HTMLElement {
     const headIcon = iconBtn?.querySelector(".icon");
     if (headIcon) headIcon.icon = node.icon || DEFAULT_ICON;
     label(`[data-focus-key="ungroup:${id}"]`, t(lang, "ungroup", { name: node.name }));
+    const more = label(`[data-focus-key="more:${L.groupKey(id)}"]`, `${t(lang, "optMore")}, ${node.name}`);
+    if (more) more.title = t(lang, "options", { name: node.name });
     for (const [key, short, long, on] of [
       ["open", "optOpen", "startOpen", node.start_open === true],
       ["tabbed", "optTabs", "tabbed", node.tabbed === true],
@@ -757,6 +988,7 @@ class EspEditor extends HTMLElement {
     const active = root.activeElement;
     const focusKey = this.focusKey ?? active?.dataset?.focusKey ?? null;
     for (const id of [...this.nameErrors.keys()]) if (!this.tree.some((n) => n.type === "group" && n.id === id)) this.nameErrors.delete(id);
+    for (const [k, { row }] of [...this.optErrors]) if (!L.locate(this.tree, row)) this.optErrors.delete(k);
 
     const bar = h(
       "div",
@@ -777,10 +1009,10 @@ class EspEditor extends HTMLElement {
     );
 
     const add = h(
-      "button",
-      { class: "add", type: "button", "data-focus-key": "add", onclick: () => this.actions.addGroup() },
-      svg(ICONS.plus),
-      t(lang, "addGroup"),
+      "div",
+      { class: "adds" },
+      h("button", { class: "add", type: "button", "data-focus-key": "add", onclick: () => this.actions.addGroup() }, svg(ICONS.plus), t(lang, "addGroup")),
+      h("button", { class: "add", type: "button", "data-focus-key": "addlink", onclick: () => this.actions.addLink() }, svg(ICONS.link), t(lang, "addLink")),
     );
     const list = h("div", { class: "list", role: "list", "aria-labelledby": "esp-title" });
     for (const node of this.tree) {
@@ -833,7 +1065,7 @@ class EspEditor extends HTMLElement {
         ),
       );
 
-    this._content.replaceChildren(bar, settings, add, list, footer.childElementCount ? footer : "");
+    this._content.replaceChildren(bar, settings, add, list, footer.childElementCount ? footer : "", this._entities);
 
     if (focusKey) {
       const el = root.querySelector(`[data-focus-key="${CSS.escape(focusKey)}"]`);
@@ -850,12 +1082,12 @@ class EspEditor extends HTMLElement {
     const input = h("input", {
       class: "name-input",
       type: "text",
-      maxlength: String(L.MAX_NAME),
       "aria-label": t(lang, "groupName"),
       "aria-describedby": `name-err-${node.id}`,
       "aria-invalid": pending === undefined ? null : "true",
       "data-focus-key": `name:${node.id}`,
       ".value": pending ?? node.name,
+      oninput: (e) => limitInput(e.target, L.MAX_NAME),
       onchange: (e) => this.actions.rename(node.id, e.target),
       onkeydown: (e) => {
         if (e.key !== "Enter") return;
@@ -923,10 +1155,25 @@ class EspEditor extends HTMLElement {
         svg(ICONS.ungroup),
         t(lang, "optUngroup"),
       ),
+      h(
+        "button",
+        {
+          class: "opt more",
+          type: "button",
+          "aria-expanded": String(this.optionsOpen === key),
+          "aria-label": `${t(lang, "optMore")}, ${node.name}`,
+          title: t(lang, "options", { name: node.name }),
+          "data-focus-key": `more:${key}`,
+          onclick: () => this.toggleOptions(key),
+        },
+        svg(ICONS.more),
+        t(lang, "optMore"),
+      ),
     );
     const block = h("div", { class: "group", role: "listitem", "data-block": key, "data-tabbed": node.tabbed === true }, head, nameError, opts);
     this.paintGroup(block, node);
     if (this.iconEditing === node.id) block.append(this.iconEditor(node));
+    if (this.optionsOpen === key) block.append(this.optionsPanel(key));
     const kids = h("div", { class: "children", role: "list", "aria-label": node.name, "data-children": node.id });
     const shown = node.children.filter((c) => !c.missing);
     for (const c of shown) kids.append(h("div", { role: "listitem" }, this.panelRow(c, node.id)));
@@ -1172,38 +1419,249 @@ class EspEditor extends HTMLElement {
     );
   }
 
+  /** A panel or link row, followed by its ⋮ options while they are open. */
   panelRow(node, groupId) {
     const lang = this.lang;
     const key = L.panelKey(node.path);
-    const info = this.info.get(node.path) ?? { title: node.path, icon: null };
-    const hidden = this.hiddenSet.has(node.path);
+    const link = L.isLink(node.path);
+    const info = this.infoOf(node.path);
+    const hidden = !link && this.hiddenSet.has(node.path);
     const locked = this.lockedVisible.has(node.path);
     // The default dashboard cannot be hidden (HA rule): the eye stays focusable and says why.
     const eyeLabel = locked ? t(lang, "alwaysShown", { name: info.title }) : t(lang, hidden ? "show" : "hide", { name: info.title });
-    return h(
+    // Links have no eye: they are not HA panels (HA's hidden list), and are deleted instead.
+    const eye = link
+      ? null
+      : h(
+          "button",
+          {
+            class: "icon-btn eye",
+            type: "button",
+            "aria-pressed": locked ? null : String(hidden),
+            "aria-label": eyeLabel,
+            title: eyeLabel,
+            "aria-disabled": locked ? "true" : null,
+            "data-focus-key": `eye:${node.path}`,
+            onclick: () => {
+              if (!locked) this.actions.toggleHidden(node.path);
+            },
+          },
+          svg(hidden ? ICONS.eyeOff : ICONS.eye),
+        );
+    const optLabel = t(lang, "options", { name: info.title });
+    const row = h(
       "div",
-      { class: `row${hidden ? " hidden" : ""}`, "data-key": key, "data-group": groupId ?? "" },
+      { class: `row${hidden ? " hidden" : ""}${link ? " link" : ""}`, "data-key": key, "data-group": groupId ?? "" },
       this.handle(key, info.title),
       iconEl(info.icon, info.iconPath),
       h("span", { class: "title", dir: "auto" }, info.title),
       h("span", { class: "merge-label", "aria-hidden": "true" }),
+      eye,
       h(
         "button",
         {
-          class: "icon-btn eye",
+          class: "icon-btn more",
           type: "button",
-          "aria-pressed": locked ? null : String(hidden),
-          "aria-label": eyeLabel,
-          title: eyeLabel,
-          "aria-disabled": locked ? "true" : null,
-          "data-focus-key": `eye:${node.path}`,
-          onclick: () => {
-            if (!locked) this.actions.toggleHidden(node.path);
-          },
+          "aria-expanded": String(this.optionsOpen === key),
+          "aria-label": optLabel,
+          title: optLabel,
+          "data-focus-key": `more:${key}`,
+          onclick: () => this.toggleOptions(key),
         },
-        svg(hidden ? ICONS.eyeOff : ICONS.eye),
+        svg(ICONS.more),
       ),
     );
+    return this.optionsOpen === key ? [row, this.optionsPanel(key)] : row;
+  }
+
+  toggleOptions(key) {
+    this.set({ optionsOpen: this.optionsOpen === key ? null : key }, `more:${key}`);
+  }
+
+  /**
+   * The ⋮ options of a row: for a link its name, address, icon and new-tab choice; for a panel or link
+   * "Move to"; for every row a badge entity, a show-only-when entity and search words. Fields commit
+   * in place (no re-render, focus stays); a move or a delete re-renders.
+   */
+  optionsPanel(key) {
+    const lang = this.lang;
+    const at = L.locate(this.tree, key);
+    if (!at) return null;
+    const isGroup = at.node.type === "group";
+    const path = isGroup ? null : at.node.path;
+    const ikey = L.itemKey(key);
+    const item = this.item(ikey);
+    const fk = (field) => `opt:${field}:${key}`;
+    const errors = this.optErrors;
+    const parts = [];
+    if (path && L.isLink(path)) {
+      const id = L.linkId(path);
+      const link = this.meta.links[id] ?? {};
+      parts.push(
+        optField({
+          label: t(lang, "linkName"),
+          value: link.name,
+          focusKey: fk("name"),
+          errors,
+          row: key,
+          limit: L.MAX_NAME,
+          commit: (input) => this.actions.setLink(id, "name", input.value),
+        }),
+        optField({
+          label: t(lang, "linkUrl"),
+          help: t(lang, "linkUrlHelp"),
+          value: link.url,
+          focusKey: fk("url"),
+          errors,
+          row: key,
+          dir: "ltr",
+          limit: L.MAX_URL,
+          placeholder: "/config/automation",
+          commit: (input) => this.actions.setLink(id, "url", input.value),
+        }),
+        optField({
+          label: t(lang, "linkIcon"),
+          value: link.icon,
+          focusKey: fk("icon"),
+          errors,
+          row: key,
+          dir: "ltr",
+          placeholder: DEFAULT_LINK_ICON,
+          commit: (input) => this.actions.setLink(id, "icon", input.value),
+        }),
+        h(
+          "label",
+          { class: "check" },
+          h("input", {
+            type: "checkbox",
+            "data-focus-key": fk("newtab"),
+            ".checked": link.new_tab === true,
+            onchange: (e) => this.actions.setLink(id, "new_tab", e.target.checked),
+          }),
+          h("span", {}, t(lang, "linkNewTab")),
+        ),
+        h("div", { class: "note" }, t(lang, "linkNewTabHelp")),
+      );
+    }
+    if (path) {
+      // Where the row is now: top level, a group, or the pinned area.
+      const dests = [[null, t(lang, "moveTop")]];
+      for (const n of this.tree) if (n.type === "group") dests.push([n.id, L.isPins(n) ? t(lang, "pinned") : n.name]);
+      parts.push(
+        h(
+          "label",
+          { class: "field" },
+          h("span", {}, t(lang, "moveTo")),
+          h(
+            "select",
+            { "data-focus-key": fk("move"), onchange: (e) => this.actions.moveTo(key, e.target.value === "" ? null : e.target.value) },
+            dests.map(([id, label]) => h("option", { value: id ?? "", ".selected": at.group === id }, label)),
+          ),
+        ),
+      );
+    }
+    const entity = (field, label, help) =>
+      optField({
+        label: t(lang, label),
+        help: t(lang, help),
+        value: item[field],
+        focusKey: fk(field),
+        errors,
+        row: key,
+        dir: "ltr",
+        list: "esp-entities",
+        placeholder: field === "badge" ? "sensor.open_windows" : "binary_sensor.alarm",
+        commit: (input) => this.actions.setItem(ikey, field, input.value),
+      });
+    parts.push(
+      entity("badge", "badge", "badgeHelp"),
+      entity("show_when", "showWhen", "showWhenHelp"),
+      optField({
+        label: t(lang, "aliases"),
+        help: t(lang, "aliasesHelp"),
+        value: item.aliases,
+        focusKey: fk("aliases"),
+        errors,
+        row: key,
+        limit: L.MAX_ALIASES,
+        commit: (input) => this.actions.setItem(ikey, "aliases", input.value),
+      }),
+    );
+    if (path && L.isLink(path)) {
+      const name = this.infoOf(path).title;
+      parts.push(
+        h(
+          "button",
+          { class: "btn remove", type: "button", "aria-label": t(lang, "removeLink", { name }), "data-focus-key": fk("remove"), onclick: () => this.actions.removeLink(L.linkId(path)) },
+          svg(ICONS.delete),
+          t(lang, "optRemove"),
+        ),
+      );
+    }
+    return h("div", { class: "row-opts", role: "group", "aria-label": t(lang, "options", { name: this.name(key) }), "data-opts": key }, parts);
+  }
+
+  /** A link's name or icon changed: update its row in place. */
+  patchLink(id) {
+    const path = L.linkPath(id);
+    const key = L.panelKey(path);
+    const row = this._q(`.row[data-key="${CSS.escape(key)}"]`);
+    if (!row) return;
+    const info = this.infoOf(path);
+    const title = row.querySelector(".title");
+    if (title && title.textContent !== info.title) title.textContent = info.title;
+    const icon = row.querySelector("ha-icon.icon");
+    if (icon) icon.icon = info.icon;
+    for (const [sel, text] of [
+      [".handle", t(this.lang, "drag", { name: info.title })],
+      [".more", t(this.lang, "options", { name: info.title })],
+    ]) {
+      const el = row.querySelector(sel);
+      if (!el) continue;
+      el.setAttribute("aria-label", text);
+      el.title = text;
+    }
+    this._q(`[data-opts="${CSS.escape(key)}"]`)?.setAttribute("aria-label", t(this.lang, "options", { name: info.title }));
+    this._q(`[data-focus-key="${CSS.escape(`opt:remove:${key}`)}"]`)?.setAttribute("aria-label", t(this.lang, "removeLink", { name: info.title }));
+  }
+
+  /** A ⋮ option field shows an error: open that row's options, focus the field and say it again. Returns whether one did. */
+  focusInvalidOption() {
+    for (const [focusKey, { row, message }] of this.optErrors) {
+      if (!L.locate(this.tree, row)) {
+        this.optErrors.delete(focusKey);
+        continue;
+      }
+      this.set({ optionsOpen: row }, focusKey);
+      const input = this._q(`[data-focus-key="${CSS.escape(focusKey)}"]`);
+      const error = input && this._q(`#${CSS.escape(input.getAttribute("aria-describedby").split(" ")[0])}`);
+      if (error) {
+        error.textContent = "";
+        setTimeout(() => (error.textContent = message), 50);
+      }
+      return true;
+    }
+    return false;
+  }
+
+  /** A link that cannot be saved (no valid address): open its options, focus the address and say why. */
+  focusInvalidLink() {
+    for (const path of L.flatten(this.tree)) {
+      const id = L.linkId(path);
+      if (id === null || L.cleanLink(this.meta.links[id])) continue;
+      const key = L.panelKey(path);
+      const focusKey = `opt:url:${key}`;
+      this.set({ optionsOpen: key }, focusKey);
+      const input = this._q(`[data-focus-key="${CSS.escape(focusKey)}"]`);
+      const error = input && this._q(`#${CSS.escape(input.getAttribute("aria-describedby").split(" ")[0])}`);
+      input?.setAttribute("aria-invalid", "true");
+      if (error) {
+        error.textContent = "";
+        setTimeout(() => (error.textContent = t(this.lang, "linkUrlInvalid")), 50);
+      }
+      return true;
+    }
+    return false;
   }
 
   handle(key, label) {
@@ -1487,8 +1945,11 @@ class EspSearch extends HTMLElement {
 
 // Above the page (slotted into HA's drawer before the panel): a second level, styled apart from HA's
 // own header and view tabs. Selected text is the theme colour mixed toward the text colour (4.5:1).
+// Placed like HA's own header: fixed at the top, horizontally where it would be in the flow (beside the
+// sidebar), as wide as HA's top bar, above HA's header layer (z-index 4). The page makes room through its top inset.
 const TABS_CSS = `
-:host { display: flex; align-items: center; gap: 12px; box-sizing: border-box;
+:host { display: flex; align-items: center; gap: 12px; box-sizing: border-box; position: fixed; top: 0; z-index: 5;
+  width: var(--ha-top-app-bar-width, 100%);
   height: calc(${TABS_HEIGHT}px + var(--safe-area-inset-top, 0px)); padding: var(--safe-area-inset-top, 0px) 12px 0;
   background: var(--secondary-background-color, #e5e5e5); border-bottom: 1px solid var(--divider-color);
   color: var(--primary-text-color); font-size: var(--ha-font-size-m, 14px);
@@ -1507,6 +1968,11 @@ a[aria-current="page"] { border-color: transparent; color: var(--esp-tab-current
   background: rgba(var(--rgb-primary-color, 3,169,244), 0.14); }
 a:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 1px; }
 @media (max-width: 600px) { .title { display: none; } }
+/* Narrow screens: a bottom bar (the bottom safe area is its own). Below the modal drawer's scrim (z-index 5):
+   HA's header does not reach the bottom. */
+:host([bottom]) { top: auto; bottom: 0; z-index: 4;
+  height: calc(${TABS_HEIGHT}px + var(--safe-area-inset-bottom, 0px)); padding: 0 12px var(--safe-area-inset-bottom, 0px);
+  border-bottom: none; border-top: 1px solid var(--divider-color); }
 `;
 
 class EspTabs extends HTMLElement {
@@ -1521,7 +1987,7 @@ class EspTabs extends HTMLElement {
     this._sig = "";
   }
 
-  /** view: { name, icon, tabs: [{ path, title, icon }], selected }. Rebuilt only when it changes. */
+  /** view: { name, icon, tabs: [{ path, href, newTab, title, icon }], selected }. Rebuilt only when it changes. */
   set(view) {
     const sig = JSON.stringify(view);
     if (sig === this._sig) return;
@@ -1533,13 +1999,15 @@ class EspTabs extends HTMLElement {
         h(
           "a",
           {
-            href: `/${tab.path}`,
+            href: tab.href,
+            target: tab.newTab ? "_blank" : null,
+            rel: tab.newTab ? "noopener noreferrer" : null,
             "aria-current": tab.path === view.selected ? "page" : null,
             onclick: (e) => {
-              // A plain click navigates inside HA; modified clicks (new tab or window) stay the browser's.
-              if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+              // A plain click navigates inside HA; modified clicks (new tab or window) and new-tab links stay the browser's.
+              if (tab.newTab || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
               e.preventDefault();
-              if (tab.path !== view.selected) navigate(`/${tab.path}`);
+              if (tab.path !== view.selected) navigate(tab.href);
             },
           },
           iconEl(tab.icon),
@@ -1590,6 +2058,14 @@ ha-list-item-button[data-esp-group]:not(.selected) ha-svg-icon[slot="start"] { c
 .esp-btn:focus-visible { outline: 2px solid var(--primary-color); }
 .esp-btn svg { width: 20px; height: 20px; fill: currentColor; }
 :host(:not([expanded])) .esp-btn { display: none; }
+/* Badges (v0.5): HA styles .badge and places the rail one after an SVG icon; dashboards and links use ha-icon. */
+ha-icon + .badge.esp-badge { position: absolute; top: var(--ha-space-1, 4px); left: 26px; border-radius: var(--ha-border-radius-md, 8px); font-size: 0.65em;
+  line-height: var(--ha-line-height-expanded, 1.5); padding: 0 var(--ha-space-1, 4px); }
+.badge.esp-dot { min-width: 0; width: 10px; height: 10px; padding: 0; border-radius: 50%; }
+ha-icon + .badge.esp-dot, ha-svg-icon + .badge.esp-dot { width: 8px; height: 8px; padding: 0; top: 6px; left: 30px; border-radius: 50%; }
+/* Pinned cells show icons only, also in the expanded sidebar: the badge sits on the icon there. */
+:host([expanded]) ha-list-item-button[data-esp-pin] .badge.esp-badge[slot="start"] { opacity: 1; transform: none; }
+:host([expanded]) ha-list-item-button[data-esp-pin] .badge.esp-badge[slot="end"] { display: none; }
 `;
 let sidebarSheet = null;
 let navSheet = null;
@@ -1656,15 +2132,31 @@ class Controller {
   }
 
   connect() {
+    live.add(this);
     this.connectNative();
+    // An internal link is selected by the page's path, which can change inside one panel (dashboard views).
+    if (!this.onLocation) {
+      // HA re-renders for the route itself (and fires location-changed twice per click): refresh only when the
+      // selected internal link differs from the one the last render used (PERF-005).
+      this.onLocation = () => {
+        if (!this.sb.isConnected) return this.disconnect();
+        const links = this.data?.layout?.links;
+        if (!links || !Object.keys(links).length) return;
+        if (L.linkAt(links, location.pathname) !== this.renderedLink) this.refresh();
+      };
+      window.addEventListener("location-changed", this.onLocation);
+      window.addEventListener("popstate", this.onLocation);
+    }
     if (this.unsub || this.subscribing || !this.hass?.connection) return;
     this.subscribing = true;
     this.hass.connection
       .subscribeMessage((msg) => this.onData(msg), { type: `${DOMAIN}/subscribe` })
       .then(
         (unsub) => {
-          this.unsub = unsub;
           this.subscribing = false;
+          // Disconnected while subscribing: do not keep the subscription.
+          if (!live.has(this)) return unsub();
+          this.unsub = unsub;
         },
         () => {
           this.subscribing = false;
@@ -1682,8 +2174,9 @@ class Controller {
       .subscribeMessage((msg) => this.onNative(msg?.value), { type: "frontend/subscribe_user_data", key: "sidebar" })
       .then(
         (unsub) => {
-          this.nativeUnsub = unsub;
           this.nativeSubscribing = false;
+          if (!live.has(this)) return unsub();
+          this.nativeUnsub = unsub;
         },
         () => {
           this.nativeSubscribing = false;
@@ -1693,6 +2186,12 @@ class Controller {
 
   disconnect() {
     this.clearTabs();
+    live.delete(this);
+    if (this.onLocation) {
+      window.removeEventListener("location-changed", this.onLocation);
+      window.removeEventListener("popstate", this.onLocation);
+      this.onLocation = null;
+    }
     this.unsub?.();
     this.unsub = null;
     this.nativeUnsub?.();
@@ -1782,25 +2281,47 @@ class Controller {
     this.pinPanels = [];
     this.pinPaths = [];
     const byPath = (this.byPath = new Map(panels.map((p) => [p.url_path, p])));
-    const visible = (this.visible = [...byPath.keys()]);
+    const layout = this.viewLayout();
+    // Links are rows like panels; "show only when" conditions take entries out while their entity is off.
+    const states = this.hass?.states ?? {};
+    this.watch = L.watchedEntities(layout);
+    this.seen = new Map(this.watch.map((e) => [e, states[e]]));
+    const off = L.hiddenByCondition(layout, (e) => L.entityActive(states[e]));
+    const visible = (this.visible = [...byPath.keys(), ...L.linkPaths(layout)].filter((p) => !off.has(p)));
+    // An internal link whose page is open is the selected row (the longest match), instead of HA's panel.
+    const at = (this.renderedLink = L.linkAt(layout?.links, location.pathname));
+    selected = at && visible.includes(at) ? at : selected;
     this.selected = selected;
     if (this.editing) return [this.editor];
-    const layout = this.viewLayout();
     this.settings = L.cleanSettings(layout?.settings);
     if (this.sessionInitial && this.session !== null) {
       this.session = L.initialCollapsed(layout, visible, this.settings.accordion);
       this.sessionInitial = false;
     }
     this.pinPaths = L.pinned(layout, visible);
-    this.pinPanels = this.pinPaths.map((p) => byPath.get(p));
+    this.pinPanels = this.pinPaths.map((p) => this.panelFor(p));
     // HA reflects `expanded` from `alwaysExpand` in updated(), i.e. after this render: read the property.
     const iconOnly = typeof this.sb.alwaysExpand === "boolean" ? !this.sb.alwaysExpand : !this.sb.hasAttribute("expanded");
     if (!this.settings.search) this.query = "";
     // The icon-only rail has no box: it shows everything, and the query is back when the sidebar expands.
     const searching = this.settings.search && !iconOnly && !!this.query.trim();
-    const rows = searching
-      ? L.searchRows(layout, visible, new Map(panels.map((p) => [p.url_path, panelTitle(this.hass, p)])), this.query, selected)
-      : L.arrange(layout, visible, this.collapsed, selected);
+    let rows;
+    if (searching) {
+      // Words a row is found by: its shown name, HA's own (untranslated) title and its path; a link's name and address.
+      const words = new Map(panels.map((p) => [p.url_path, [panelTitle(this.hass, p), p.title ?? "", p.url_path]]));
+      for (const [id, link] of Object.entries(layout?.links ?? {})) words.set(L.linkPath(id), [link.name, link.url]);
+      this.loadViews();
+      rows = L.searchRows(layout, visible, words, this.query, selected, [], this.views ?? []);
+    } else rows = L.arrange(layout, visible, this.collapsed, selected);
+    // Badges: an entry's own entity; a folded or tabbed group without its own badge adds up its members'.
+    const items = layout?.items ?? {};
+    const badgeFor = (key) => (items[key]?.badge ? L.badgeOf(states[items[key].badge]) : null);
+    this.badges = new Map([...visible].map((p) => [p, badgeFor(p)]).filter(([, b]) => b));
+    for (const r of rows)
+      if (r.type === "group") {
+        const own = items[L.groupKey(r.id)]?.badge;
+        r.badge = own ? badgeFor(L.groupKey(r.id)) : r.collapsed || r.tabbed ? L.rollup(r.paths.map((p) => this.badges.get(p))) : null;
+      }
     this.rows = rows;
     this.rowGroups = new Map(rows.filter((r) => r.type === "panel").map((r) => [r.path, r.group]));
     // Folding (accordion, collapse all) is about the groups that fold: a tabbed group is a single row.
@@ -1812,7 +2333,13 @@ class Controller {
     const rtl = dir ? dir === "rtl" : getComputedStyle(this.sb).direction === "rtl";
     const used = new Set();
     const out = rows.map((r) => {
-      if (r.type === "panel") return this.sb._renderPanel(byPath.get(r.path), r.path === selected);
+      if (r.type === "panel") return this.sb._renderPanel(this.panelFor(r.path), r.path === selected);
+      if (r.type === "view") {
+        // A dashboard view found by the search: HA's row, its address is "/<dashboard>/<view>".
+        const dash = byPath.get(r.dash) ?? { url_path: r.dash };
+        const title = t(this.lang, "viewOf", { view: r.title, dash: panelTitle(this.hass, dash) });
+        return this.sb._renderPanel({ url_path: r.path, title, icon: r.icon || panelIcon(dash) }, false);
+      }
       used.add(r.id);
       let el = this.groupEls.get(r.id);
       if (!el) {
@@ -1821,8 +2348,7 @@ class Controller {
       }
       // While searching, groups show unfolded with their matches: a click does not fold them; a tabbed
       // group found by one of its panels opens that tab.
-      el.onToggle = r.tabbed ? () => this.openTabs(r.id, r.match ? [r.match] : r.paths) : searching ? () => {} : () => this.toggle(r.id);
-      el.update(r, this.lang, iconOnly, rtl, this.groupLooks.get(r.id), this.settings.header, this.settings.hide_count);
+      el.onToggle = r.tabbed ? () => this.openTabs(r.id, r.match ? [r.match] : r.paths) : searching ? () => {} : () => this.toggle(r.id);      el.update(r, this.lang, iconOnly, rtl, this.groupLooks.get(r.id), this.settings.header, this.settings.hide_count);
       return el;
     });
     for (const id of [...this.groupEls.keys()]) if (!used.has(id)) this.groupEls.delete(id);
@@ -1844,12 +2370,58 @@ class Controller {
         if (!path) return;
         this.query = "";
         this.refresh();
-        if (path !== this.selected) navigate(`/${path}`);
+        if (path !== this.selected) this.go(path);
       };
       el.onDown = () => this.sb.shadowRoot?.querySelector("ha-list-nav.before-spacer")?.focusItemAtIndex?.(0);
     }
     el.update(this.query, this.lang, iconOnly, found);
     return el;
+  }
+
+  /** The panel object HA's `_renderPanel` draws for a row: the panel itself, or a stand-in for a link. */
+  panelFor(path) {
+    if (!L.isLink(path)) return this.byPath.get(path);
+    const link = this.data?.layout?.links?.[L.linkId(path)] ?? {};
+    return { url_path: `${LINK_ROW}${L.linkId(path)}`, title: link.name ?? "", icon: link.icon || DEFAULT_LINK_ICON };
+  }
+
+  /** Open a row: a panel or a dashboard view inside HA; a link at its address (a new browser tab when set, or for a web address). */
+  go(path) {
+    if (!L.isLink(path)) return navigate(`/${path}`);
+    const link = this.data?.layout?.links?.[L.linkId(path)];
+    if (!link) return;
+    if (L.isExternal(link.url) || link.new_tab) window.open(link.url, "_blank", "noopener");
+    else navigate(link.url);
+  }
+
+  /**
+   * Views of the shown dashboards for the search, fetched when a search starts (at most every 5 minutes).
+   * A dashboard without a stored config (auto-generated) or one the user cannot read is skipped.
+   */
+  loadViews() {
+    if (this.viewsLoading || (this.viewsAt && Date.now() - this.viewsAt < VIEWS_TTL_MS)) return;
+    this.viewsLoading = true;
+    const dashes = [...this.byPath.values()].filter((p) => p.component_name === "lovelace");
+    const user = this.hass?.user?.id;
+    Promise.all(
+      dashes.map((p) =>
+        this.hass
+          .callWS({ type: "lovelace/config", url_path: p.url_path === "lovelace" ? null : p.url_path })
+          .then((config) => L.dashboardViews(p.url_path, config, user), () => []),
+      ),
+    ).then((lists) => {
+      this.views = lists.flat();
+      this.viewsAt = Date.now();
+      this.viewsLoading = false;
+      if (this.query.trim()) this.refresh();
+    });
+  }
+
+  /** Whether an entity a badge or condition reads changed since the last render. */
+  statesChanged() {
+    if (!this.watch?.length || this.editing) return false;
+    const states = this.hass?.states ?? {};
+    return this.watch.some((e) => states[e] !== this.seen?.get(e));
   }
 
   /**
@@ -1869,11 +2441,12 @@ class Controller {
         self = sb;
       }
     }
-    return this.pinPanels.map((panel) => {
+    return this.pinPanels.map((panel, i) => {
+      const on = this.pinPaths[i] === this.selected;
       try {
-        return sb._renderPanel.call(self, panel, panel.url_path === selected);
+        return sb._renderPanel.call(self, panel, on);
       } catch (_err) {
-        return sb._renderPanel(panel, panel.url_path === selected);
+        return sb._renderPanel(panel, on);
       }
     });
   }
@@ -1994,8 +2567,15 @@ class Controller {
     if (!root.adoptedStyleSheets.includes(sidebarSheet)) root.adoptedStyleSheets = [...root.adoptedStyleSheets, sidebarSheet];
     const divider = this.editing ? "line" : this.settings.divider;
     if (this.sb.getAttribute("data-esp-divider") !== divider) this.sb.setAttribute("data-esp-divider", divider);
+    // Links (address, new tab) and badges, in the main list and the pinned grid.
+    if (!this.editing)
+      for (const item of root.querySelectorAll('ha-list-nav ha-list-item-button[id^="sidebar-panel-"]')) {
+        const path = rowPath(item);
+        if (L.isLink(path)) this.linkItem(item, path);
+        setBadge(item, this.badges?.get(path) ?? null, this.lang);
+      }
     for (const item of root.querySelectorAll('ha-list-nav.before-spacer ha-list-item-button[id^="sidebar-panel-"]')) {
-      const path = item.id.slice("sidebar-panel-".length);
+      const path = rowPath(item);
       const group = this.editing ? null : this.rowGroups.get(path);
       // Write only on change: an attribute write per row per update costs a style pass each time.
       if (group) {
@@ -2066,7 +2646,8 @@ class Controller {
       if (all.nextElementSibling !== edit) menu.insertBefore(all, edit);
       const ids = [...this.groupNames.keys()];
       const action = L.allAction(this.collapsed, ids, this.settings.accordion);
-      all.hidden = this.editing || !this.settings.toggle_all || ids.length < 2 || !action;
+      // Written on change only, like the rows (PERF-004).
+      setFlag(all, "hidden", this.editing || !this.settings.toggle_all || ids.length < 2 || !action);
       if (!all.hidden) {
         const open = action === "collapse";
         const label = t(this.lang, open ? "collapseAll" : "expandAll");
@@ -2076,10 +2657,27 @@ class Controller {
           all.replaceChildren(svg(open ? ICONS.collapseAll : ICONS.expandAll));
         }
       }
-      edit.hidden = this.editing;
-      edit.setAttribute("aria-label", t(this.lang, "edit"));
-      edit.title = t(this.lang, "edit");
+      setFlag(edit, "hidden", !!this.editing);
+      const editLabel = t(this.lang, "edit");
+      setAttr(edit, "aria-label", editLabel);
+      if (edit.title !== editLabel) edit.title = editLabel;
     }
+  }
+
+  /**
+   * A link row is HA's panel row drawn for a stand-in path: point it at the link's address. Lit set the
+   * stand-in once and only writes it again when it changes, so these values stay. A web address, or a link
+   * set to, opens in a new browser tab.
+   */
+  linkItem(item, path) {
+    const link = this.data?.layout?.links?.[L.linkId(path)];
+    if (!link) return;
+    const newTab = L.isExternal(link.url) || link.new_tab === true;
+    if (item.href !== link.url) item.href = link.url;
+    const target = newTab ? "_blank" : undefined;
+    if (item.target !== target) item.target = target;
+    const rel = newTab ? "noopener noreferrer" : undefined;
+    if (item.rel !== rel) item.rel = rel;
   }
 
   /** Pinned rows in HA's fixed list: mark them (grid cell size), name them, place their tooltips, keys. */
@@ -2100,7 +2698,7 @@ class Controller {
       if (desc.textContent !== text) desc.textContent = text;
     }
     for (const item of nav.querySelectorAll('ha-list-item-button[id^="sidebar-panel-"]')) {
-      const pin = pins.has(item.id.slice("sidebar-panel-".length));
+      const pin = pins.has(rowPath(item));
       if (item.hasAttribute("data-esp-pin") !== pin) item.toggleAttribute("data-esp-pin", pin);
       if (pin && item.getAttribute("aria-describedby") !== descId) item.setAttribute("aria-describedby", descId);
     }
@@ -2149,7 +2747,7 @@ class Controller {
   /** A tabbed row was clicked: open the tab last open in this page, or the first. */
   openTabs(id, paths) {
     const path = L.tabTarget(paths, this.lastTab.get(id));
-    if (path && path !== this.selected) navigate(`/${path}`);
+    if (path && path !== this.selected) this.go(path);
   }
 
   /**
@@ -2168,20 +2766,31 @@ class Controller {
       this.tabsEl = document.createElement("esp-tabs");
       this.tabsEl.slot = "appContent";
     }
-    if (this.tabsEl.parentNode !== drawer || this.tabsEl.nextElementSibling !== res) drawer.insertBefore(this.tabsEl, res);
-    if (this.tabsRes !== res) {
+    // On a narrow screen (phones, HA's drawer sidebar) the strip is a bottom bar, as in mobile apps; above the page otherwise.
+    const bottom = this.sb.hasAttribute("narrow");
+    this.tabsEl.toggleAttribute("bottom", bottom);
+    if (bottom ? res.nextElementSibling !== this.tabsEl : this.tabsEl.nextElementSibling !== res || this.tabsEl.parentNode !== drawer)
+      drawer.insertBefore(this.tabsEl, bottom ? res.nextSibling : res);
+    const style = bottom ? RESOLVER_STYLE_BOTTOM : RESOLVER_STYLE;
+    if (this.tabsRes !== res || this.tabsStyle !== style) {
       this.unstyleResolver();
-      for (const [k, v] of Object.entries(RESOLVER_STYLE)) res.style.setProperty(k, v);
+      for (const [k, v] of Object.entries(DRAWER_STYLE)) drawer.style.setProperty(k, v);
+      for (const [k, v] of Object.entries(style)) res.style.setProperty(k, v);
       this.tabsRes = res;
+      this.tabsDrawer = drawer;
+      this.tabsStyle = style;
     }
     const hass = this.hass;
+    const links = this.data?.layout?.links ?? {};
     this.tabsEl.set({
       name: tabs.name,
       icon: tabs.icon,
       selected: this.selected,
       tabs: tabs.paths.map((path) => {
+        const link = L.isLink(path) ? links[L.linkId(path)] : null;
+        if (link) return { path, href: link.url, newTab: L.isExternal(link.url) || link.new_tab === true, title: link.name, icon: link.icon || DEFAULT_LINK_ICON };
         const panel = this.byPath.get(path) ?? { url_path: path };
-        return { path, title: panelTitle(hass, panel), icon: panelIcon(panel) };
+        return { path, href: `/${path}`, newTab: false, title: panelTitle(hass, panel), icon: panelIcon(panel) };
       }),
     });
   }
@@ -2193,8 +2802,11 @@ class Controller {
 
   unstyleResolver() {
     if (!this.tabsRes) return;
-    for (const k of Object.keys(RESOLVER_STYLE)) this.tabsRes.style.removeProperty(k);
+    for (const k of Object.keys({ ...RESOLVER_STYLE, ...RESOLVER_STYLE_BOTTOM })) this.tabsRes.style.removeProperty(k);
+    for (const k of Object.keys(DRAWER_STYLE)) this.tabsDrawer?.style.removeProperty(k);
     this.tabsRes = null;
+    this.tabsDrawer = null;
+    this.tabsStyle = null;
   }
 
   /** Ids of the groups shown right now (folding applies to these). */
@@ -2271,13 +2883,16 @@ class Controller {
     const { paths, hidden, defaultInvisible, info, locked } = this.allPanels();
     const tree = L.buildTree(this.data.layout, paths, gridSupported);
     const settings = L.cleanSettings(this.data.layout?.settings);
+    const meta = L.metaOf(this.data.layout);
     // What the editor opened with: Done without a change from it saves nothing.
-    this.edit = { paths, defaultInvisible, baseTree: tree, baseHidden: new Set(hidden), baseSettings: settings };
+    this.edit = { paths, defaultInvisible, baseTree: tree, baseHidden: new Set(hidden), baseSettings: settings, baseMeta: structuredClone(meta) };
     if (!this.editor) this.editor = document.createElement("esp-editor");
     this.editing = true;
     this.editor.open({
       tree,
       settings,
+      meta,
+      entities: Object.keys(this.hass.states ?? {}).sort(),
       look: (color, iconColor) => this.look(color, iconColor),
       hexOf: (color) => this.hexOf(color),
       hiddenSet: hidden,
@@ -2317,12 +2932,13 @@ class Controller {
       this.edit.baseTree = ed().tree;
       this.edit.baseHidden = new Set(ed().hiddenSet);
       this.edit.baseSettings = ed().settings;
+      this.edit.baseMeta = structuredClone(ed().meta);
     };
     return {
       done: () => {
         const e = ed();
-        if (e.focusInvalidName()) return;
-        const kind = L.editKind(this.edit.baseTree, e.tree, this.edit.baseHidden, e.hiddenSet, this.edit.baseSettings, e.settings);
+        if (e.focusInvalidName() || e.focusInvalidOption() || e.focusInvalidLink()) return;
+        const kind = L.editKind(this.edit.baseTree, e.tree, this.edit.baseHidden, e.hiddenSet, this.edit.baseSettings, e.settings, this.edit.baseMeta, e.meta);
         if (kind === "none") return this.stopEdit();
         const onDefault = !this.data.own && !!this.data.default;
         // Hiding/showing is HA's own setting: a user on the default keeps following it.
@@ -2339,6 +2955,71 @@ class Controller {
         const id = L.newGroupId(ed().tree);
         ed().set({ tree: L.addGroup(ed().tree, id, L.uniqueName(ed().tree, t(lang(), "newGroup"))) }, `name:${id}`);
         ed().shadowRoot.querySelector(`[data-focus-key="name:${id}"]`)?.select();
+      },
+      // A new link starts with its options open on the address (it cannot be saved without one).
+      addLink: () => {
+        const e = ed();
+        const used = new Set([...Object.keys(e.meta.links), ...e.tree.filter((n) => n.type === "group").map((n) => n.id)]);
+        let id;
+        do id = L.newGroupId(e.tree);
+        while (used.has(id));
+        e.meta.links[id] = { name: t(lang(), "newLink"), icon: null, url: "", new_tab: false };
+        const key = L.panelKey(L.linkPath(id));
+        e.set({ tree: L.addLink(e.tree, id), optionsOpen: key }, `opt:url:${key}`);
+      },
+      /** A link field; returns an error text for the field ("" when it was taken). */
+      setLink: (id, field, value) => {
+        const e = ed();
+        const link = e.meta.links[id];
+        if (!link) return "";
+        if (field === "name") {
+          const name = L.cleanName(value);
+          if (!name) return t(lang(), "linkNameRequired");
+          link.name = name;
+        } else if (field === "url") {
+          const url = L.normalizeUrl(value, location.origin);
+          if (!url) return t(lang(), "linkUrlInvalid");
+          link.url = url;
+          const input = e.shadowRoot.querySelector(`[data-focus-key="${CSS.escape(`opt:url:${L.panelKey(L.linkPath(id))}`)}"]`);
+          if (input && input.value !== url) input.value = url;
+        } else if (field === "icon") {
+          const icon = String(value ?? "").trim() || null;
+          if (icon !== null && !L.validIcon(icon)) return t(lang(), "iconInvalid");
+          link.icon = icon;
+        } else if (field === "new_tab") link.new_tab = value === true;
+        e.patchLink(id);
+        return "";
+      },
+      removeLink: (id) => {
+        const e = ed();
+        const path = L.linkPath(id);
+        const name = e.infoOf(path).title;
+        const tree = L.removeEntry(e.tree, L.panelKey(path));
+        delete e.meta.links[id];
+        delete e.meta.items[path];
+        e.set({ tree, optionsOpen: null }, "addlink");
+        e.announce(t(lang(), "removed", { name }));
+      },
+      moveTo: (key, dest) => {
+        const tree = L.moveTo(ed().tree, key, dest);
+        if (tree === ed().tree) return ed().set({}, `opt:move:${key}`);
+        ed().set({ tree }, `opt:move:${key}`);
+        ed().announce(where(tree, key));
+      },
+      /** A badge / show-only-when entity or search words of an entry; returns an error text or "". */
+      setItem: (ikey, field, value) => {
+        const e = ed();
+        const text = String(value ?? "").trim();
+        let clean;
+        if (field === "aliases") clean = L.cleanAliases(text);
+        else {
+          clean = text.toLowerCase() || null;
+          if (clean !== null && !L.validEntity(clean)) return t(lang(), "entityInvalid");
+        }
+        const next = { ...e.item(ikey), [field]: clean };
+        if (L.cleanItem(next)) e.meta.items[ikey] = next;
+        else delete e.meta.items[ikey];
+        return "";
       },
       rename: (id, input) => {
         const e = ed();
@@ -2411,7 +3092,10 @@ class Controller {
           const tree = L.buildTree(this.data.default, this.edit.paths, gridSupported);
           const settings = L.cleanSettings(this.data.default?.settings);
           await this.writeNative(tree, this.edit.baseHidden);
-          e.set({ tree, settings, hiddenSet: new Set(this.edit.baseHidden), confirming: null, notice: "", error: "", status: t(lang(), "resetDone") }, "done");
+          e.set(
+            { tree, settings, meta: L.metaOf(this.data.default), optionsOpen: null, optErrors: new Map(), hiddenSet: new Set(this.edit.baseHidden), confirming: null, notice: "", error: "", status: t(lang(), "resetDone") },
+            "done",
+          );
           rebase();
         } catch (err) {
           e.set({ confirming: null, ...this.failure(err) });
@@ -2430,10 +3114,10 @@ class Controller {
       },
       setDefault: async () => {
         const e = ed();
-        if (e.focusInvalidName()) return;
+        if (e.focusInvalidName() || e.focusInvalidOption() || e.focusInvalidLink()) return;
         if (!(await this.save(e.tree, e.hiddenSet, false))) return e.set({ confirming: null });
         try {
-          await this.hass.callWS({ type: `${DOMAIN}/default/set`, layout: L.toLayout(e.tree, e.settings) });
+          await this.hass.callWS({ type: `${DOMAIN}/default/set`, layout: L.toLayout(e.tree, e.settings, e.meta) });
           rebase();
           e.set({ confirming: null, notice: "", error: "", status: t(lang(), "setDefaultDone") }, "done");
         } catch (err) {
@@ -2527,7 +3211,7 @@ class Controller {
   async save(tree, hidden, close = true) {
     this.editor.set({ error: "" });
     try {
-      await this.hass.callWS({ type: `${DOMAIN}/save`, layout: L.toLayout(tree, this.editor.settings) });
+      await this.hass.callWS({ type: `${DOMAIN}/save`, layout: L.toLayout(tree, this.editor.settings, this.editor.meta) });
       await this.writeNative(tree, hidden);
     } catch (err) {
       this.editor.set({ ...this.failure(err) });
@@ -2541,10 +3225,12 @@ class Controller {
 function controllerFor(sb) {
   let c = ctrls.get(sb);
   if (!c) {
+    // A new sidebar: release the controllers of sidebars that left the page (PERF-006).
+    for (const old of [...live]) if (!old.sb.isConnected) old.disconnect();
     c = new Controller(sb);
     ctrls.set(sb, c);
   }
-  c.connect();
+  if (sb.isConnected) c.connect();
   return c;
 }
 
@@ -2588,6 +3274,8 @@ function patch(cls) {
       c.dirty = false;
       return true;
     }
+    // A badge or "show only when" entity changed (HA's own check looks at the panels, not at states).
+    if (c?.statesChanged()) return true;
     // HA's own check ignores hass.themes, so colours adjusted for the previous theme (light / dark)
     // would stay until an unrelated update (BUG-015). The palette is read again on the next render.
     if (c?.pal && c.pal.themes !== this.hass?.themes) {
@@ -2600,6 +3288,10 @@ function patch(cls) {
     origUpdated?.call(this, changed);
     if (this.hass) controllerFor(this).afterUpdate();
   };
+  // These two wrappers do NOT run in the browser: a custom element's lifecycle callbacks are read once, at
+  // define(), and ha-sidebar is defined before this patch (PERF-006). They stay only for callers that invoke
+  // them directly (the node tests). Real cleanup: controllerFor releases controllers of detached sidebars,
+  // and a controller's location listener disconnects it once its sidebar is detached.
   p.connectedCallback = function () {
     origConnected?.call(this);
     if (this.hass) controllerFor(this);

@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.5.0 (2026-10-09)
+
+- **Links**: add items that are not Home Assistant panels, with **Add link** in the editor: a page of Home Assistant (for example `/config/automation` or one dashboard view) or a web address (router, NAS...). Links can be grouped, pinned and be tabs. Web addresses open in a new browser tab.
+- **Item options** (⋮ on each row in the editor, **More** on a group): **Move to** a group, the top level or the pinned area without dragging; a **badge** entity (its number, or a dot while it is on, like Home Assistant's update count; folded and tabs groups add up their items' badges); **show only while an entity is on** (an item or a whole group); **search words**.
+- **Search** also finds Home Assistant's English names of built-in panels in any language ("his" finds History in Hebrew), links by name or address, search words, and dashboard views ("View · Dashboard").
+- **Tabs on phones**: on narrow screens the tabs of a tabs group are a bar at the bottom of the screen.
+- Tabs groups: on long pages the tab bar and the page header scrolled away with the page. They now stay in place.
+
 ## v0.4.2 (2026-10-08)
 
 - A refused save always said "a group name, icon or colour is not valid", whatever the real reason (#39). The message now says Home Assistant refused the layout and shows the reason on a details line under it.
