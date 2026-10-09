@@ -493,10 +493,11 @@ const GROUP_CSS = `
 :host([tabbed]) .count, :host([tabbed]) .chev { display: none; }
 :host([tabbed][selected]) .row { box-shadow: inset 0 0 0 100vmax rgba(var(--rgb-primary-color, 3,169,244), 0.12); }
 @media (prefers-reduced-motion: reduce) { .chev { transition: none; } }
-/* Badge (v0.5): HA's own sidebar badge look; a dot for an active state without a number. */
+/* Badge (v0.5): HA's own sidebar badge shape; a dot for an active state without a number. The fill is the accent
+   colour mixed 60% with black: white text 5.4:1 and the dot 5.4:1 (light) / 3.1:1 (dark sidebar) with HA's orange (BUG-016). */
 .row { position: relative; }
 .badge { flex: none; display: flex; align-items: center; justify-content: center; box-sizing: border-box; min-width: 20px; height: 20px; padding: 0 6px;
-  border-radius: 10px; background-color: var(--accent-color); color: var(--text-accent-color, var(--text-primary-color));
+  border-radius: 10px; background-color: var(--accent-color); background-color: color-mix(in srgb, var(--accent-color) 60%, black); color: #fff;
   font-size: var(--ha-font-size-s, 12px); font-weight: normal; font-variant-numeric: tabular-nums; line-height: 1; }
 .badge[data-dot] { min-width: 0; width: 10px; height: 10px; padding: 0; border-radius: 50%; }
 .badge[hidden] { display: none; }
@@ -2058,7 +2059,9 @@ ha-list-item-button[data-esp-group]:not(.selected) ha-svg-icon[slot="start"] { c
 .esp-btn:focus-visible { outline: 2px solid var(--primary-color); }
 .esp-btn svg { width: 20px; height: 20px; fill: currentColor; }
 :host(:not([expanded])) .esp-btn { display: none; }
-/* Badges (v0.5): HA styles .badge and places the rail one after an SVG icon; dashboards and links use ha-icon. */
+/* Badges (v0.5): HA styles .badge and places the rail one after an SVG icon; dashboards and links use ha-icon.
+   Our badges only (HA's own Settings badge keeps HA's look): a darker fill, white text 4.5:1 and the dot 3:1 (BUG-016). */
+ha-list-item-button > .badge.esp-badge { background-color: var(--accent-color); background-color: color-mix(in srgb, var(--accent-color) 60%, black); color: #fff; }
 ha-icon + .badge.esp-badge { position: absolute; top: var(--ha-space-1, 4px); left: 26px; border-radius: var(--ha-border-radius-md, 8px); font-size: 0.65em;
   line-height: var(--ha-line-height-expanded, 1.5); padding: 0 var(--ha-space-1, 4px); }
 .badge.esp-dot { min-width: 0; width: 10px; height: 10px; padding: 0; border-radius: 50%; }

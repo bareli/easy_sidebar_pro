@@ -7,6 +7,7 @@
 - **Search** also finds Home Assistant's English names of built-in panels in any language ("his" finds History in Hebrew), links by name or address, search words, and dashboard views ("View · Dashboard").
 - **Tabs on phones**: on narrow screens the tabs of a tabs group are a bar at the bottom of the screen.
 - Tabs groups: on long pages the tab bar and the page header scrolled away with the page. They now stay in place.
+- Badges have a darker fill than Home Assistant's own, so the white number (5.4:1) and the dot are readable on light and dark sidebars.
 
 ## v0.4.2 (2026-10-08)
 
