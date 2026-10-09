@@ -83,6 +83,25 @@ test("#60 the five Hebrew wording changes, plural imperative instead of 'יש ל
   assert.notEqual(HE.match(/\n {4}undo: "([^"]*)"/)[1], HE.match(/\n {4}cancel: "([^"]*)"/)[1]);
 });
 
+/* ---- #58 UX-016: short Hebrew add buttons, full text as tooltip and accessible name ---- */
+
+test("#58 Hebrew add buttons show 'קבוצה' / 'קישור'; English unchanged", () => {
+  assert.match(HE, /\n {4}addGroupShort: "קבוצה",/);
+  assert.match(HE, /\n {4}addLinkShort: "קישור",/);
+  assert.match(HE, /\n {4}addGroup: "הוספת קבוצה",/);
+  assert.match(HE, /\n {4}addLink: "הוספת קישור",/);
+  assert.match(EN, /\n {4}addGroupShort: "Add group",/);
+  assert.match(EN, /\n {4}addLinkShort: "Add link",/);
+  // The accessible name (full text) contains the visible word (WCAG 2.5.3).
+  for (const [s, f] of [["קבוצה", "הוספת קבוצה"], ["קישור", "הוספת קישור"]]) assert.ok(f.includes(s));
+});
+
+test("#58 the add buttons draw the short label and carry the full one as title and aria-label", () => {
+  assert.match(SRC, /addBtn\("add", ICONS\.plus, t\(lang, "addGroupShort"\), t\(lang, "addGroup"\)/);
+  assert.match(SRC, /addBtn\("addlink", ICONS\.link, t\(lang, "addLinkShort"\), t\(lang, "addLink"\)/);
+  assert.match(SRC, /const long = short === full \? null : full;\n\s+return h\("button", \{ class: "add", type: "button", "data-focus-key": focusKey, "aria-label": long, title: long, onclick: run \}, svg\(icon\), short\);/);
+});
+
 test("#60 the English address error names http or https", () => {
   assert.match(EN, /\n {4}linkUrlInvalid: "Enter a Home Assistant page \(starting with \/\) or a web address \(http or https\)",/);
 });

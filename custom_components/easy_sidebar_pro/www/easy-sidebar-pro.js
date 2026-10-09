@@ -78,6 +78,7 @@ const STRINGS = {
     done: "Done",
     cancel: "Cancel",
     addGroup: "Add group",
+    addGroupShort: "Add group",
     newGroup: "New group",
     groupName: "Group name",
     inGroup: "in group {name}",
@@ -177,6 +178,7 @@ const STRINGS = {
     linkNameRequired: "Enter a link name",
     hint: "Drag a row onto another row to make a group. The eye button hides or shows an item; the ⋮ button has more options.",
     addLink: "Add link",
+    addLinkShort: "Add link",
     newLink: "New link",
     options: "More options for {name}",
     optMore: "More",
@@ -208,6 +210,7 @@ const STRINGS = {
     done: "סיום",
     cancel: "ביטול",
     addGroup: "הוספת קבוצה",
+    addGroupShort: "קבוצה",
     newGroup: "קבוצה חדשה",
     groupName: "שם הקבוצה",
     inGroup: "בקבוצה {name}",
@@ -307,6 +310,7 @@ const STRINGS = {
     linkNameRequired: "הזינו שם לקישור",
     hint: "גררו שורה אל שורה אחרת כדי ליצור קבוצה. כפתור העין מסתיר או מציג פריט; בכפתור ⋮ יש אפשרויות נוספות.",
     addLink: "הוספת קישור",
+    addLinkShort: "קישור",
     newLink: "קישור חדש",
     options: "אפשרויות נוספות עבור {name}",
     optMore: "אפשרויות נוספות",
@@ -1009,11 +1013,17 @@ class EspEditor extends HTMLElement {
       this.error && this.errorDetail ? h("div", { class: "error detail", dir: "ltr" }, t(lang, "errorDetails", { detail: this.errorDetail })) : null,
     );
 
+    // A short visible label where the full one wraps (Hebrew: "קבוצה" / "קישור", UX-016). The full text is the
+    // tooltip and the accessible name, which contains the visible word (WCAG 2.5.3: "הוספת קבוצה" holds "קבוצה").
+    const addBtn = (focusKey, icon, short, full, run) => {
+      const long = short === full ? null : full;
+      return h("button", { class: "add", type: "button", "data-focus-key": focusKey, "aria-label": long, title: long, onclick: run }, svg(icon), short);
+    };
     const add = h(
       "div",
       { class: "adds" },
-      h("button", { class: "add", type: "button", "data-focus-key": "add", onclick: () => this.actions.addGroup() }, svg(ICONS.plus), t(lang, "addGroup")),
-      h("button", { class: "add", type: "button", "data-focus-key": "addlink", onclick: () => this.actions.addLink() }, svg(ICONS.link), t(lang, "addLink")),
+      addBtn("add", ICONS.plus, t(lang, "addGroupShort"), t(lang, "addGroup"), () => this.actions.addGroup()),
+      addBtn("addlink", ICONS.link, t(lang, "addLinkShort"), t(lang, "addLink"), () => this.actions.addLink()),
     );
     const list = h("div", { class: "list", role: "list", "aria-labelledby": "esp-title" });
     for (const node of this.tree) {
