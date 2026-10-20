@@ -1,5 +1,7 @@
 # Easy Sidebar Pro
 
+Documentation (English / עברית): https://bareli.github.io/easy_sidebar_pro/
+
 Collapsible groups for the Home Assistant sidebar, edited right inside the sidebar with drag and drop.
 Hebrew and English, right-to-left aware.
 

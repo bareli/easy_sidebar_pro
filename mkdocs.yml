@@ -1,0 +1,85 @@
+site_name: Easy Sidebar Pro
+site_description: Collapsible groups for the Home Assistant sidebar, edited right inside the sidebar with drag and drop. Hebrew and English.
+site_url: https://bareli.github.io/easy_sidebar_pro/
+repo_url: https://github.com/bareli/easy_sidebar_pro
+repo_name: bareli/easy_sidebar_pro
+edit_uri: edit/main/docs/
+copyright: MIT license. Easy Sidebar Pro by Bar Eli.
+
+theme:
+  name: material
+  logo: assets/logo.png
+  favicon: assets/favicon.png
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: blue
+      accent: amber
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: blue
+      accent: amber
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.top
+    - search.highlight
+    - content.code.copy
+    - content.action.edit
+
+plugins:
+  - search
+  - i18n:
+      docs_structure: suffix
+      reconfigure_material: true
+      reconfigure_search: true
+      languages:
+        - locale: en
+          default: true
+          name: English
+          build: true
+        - locale: he
+          name: עברית
+          build: true
+          nav_translations:
+            Home: בית
+            Install: התקנה
+            Groups and editing: קבוצות ועריכה
+            Links: קישורים
+            Action rows: שורות פעולה
+            Item options: אפשרויות פריט
+            Settings and themes: הגדרות וערכות נושא
+            Export, import and defaults: ייצוא, ייבוא וברירת מחדל
+            Troubleshooting: פתרון בעיות
+            Changelog: יומן שינויים
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.snippets:
+      base_path: ["."]
+  - tables
+  - attr_list
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Install: install.md
+  - Groups and editing: groups.md
+  - Links: links.md
+  - Action rows: actions.md
+  - Item options: items.md
+  - Settings and themes: settings.md
+  - Export, import and defaults: export-import.md
+  - Troubleshooting: troubleshooting.md
+  - Changelog: changelog.md
+
+extra_css:
+  - stylesheets/extra.css

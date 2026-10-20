@@ -16,3 +16,5 @@ Thumbs.db
 .playwright-mcp/
 node_modules/
 !qa/CLAUDE.md
+
+site/
