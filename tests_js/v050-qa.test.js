@@ -118,7 +118,7 @@ test("#45 an empty link name has its own message in both languages", () => {
 });
 
 test("#45 Done and Set as default refuse while an option field is in error", () => {
-  assert.equal(SRC.match(/if \(e\.focusInvalidName\(\) \|\| e\.focusInvalidOption\(\) \|\| e\.focusInvalidLink\(\)\) return;/g)?.length, 2);
+  assert.equal(SRC.match(/if \(e\.focusInvalidName\(\) \|\| e\.focusInvalidOption\(\) \|\| e\.focusInvalidLink\(\) \|\| e\.focusIncomplete\(\)\) return;/g)?.length, 2);
   const body = SRC.slice(SRC.indexOf("  focusInvalidOption() {"), SRC.indexOf("  /** A link that cannot be saved"));
   assert.match(body, /this\.set\(\{ optionsOpen: row \}, focusKey\)/);
   assert.match(body, /error\.textContent = "";\n\s+setTimeout\(\(\) => \(error\.textContent = message\), 50\)/);
@@ -127,7 +127,7 @@ test("#45 Done and Set as default refuse while an option field is in error", () 
 test("#45 every ⋮ text field records its error and shows it again after a re-render", () => {
   const panel = SRC.slice(SRC.indexOf("  optionsPanel(key) {"), SRC.indexOf("  /** A link's name or icon changed"));
   // link name, address, icon, badge + show-when (one helper), search words
-  assert.equal(panel.match(/errors,\n\s+row: key,/g)?.length, 6); // + the extra badges' entity field (v0.7)
+  assert.equal(panel.match(/errors,\n\s+row: key,/g)?.length, 9); // + the extra badges entity field (v0.7), action name, icon and label (v0.8)
   const field = SRC.slice(SRC.indexOf("function optField("), SRC.indexOf("class EspEditor"));
   assert.match(field, /if \(message\) errors\?\.set\(focusKey, \{ row, value: input\.value, message \}\);\n\s+else errors\?\.delete\(focusKey\);/);
   assert.match(field, /"aria-invalid": pending \? "true" : null,/);

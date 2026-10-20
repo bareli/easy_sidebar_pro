@@ -14,6 +14,7 @@ const live = new Set();
 let gridSupported = false;
 
 const ICONS = {
+  flash: "M7,2V13H10V22L17,10H13L17,2H7Z",
   pencil: "M20.71,7.04C21.1,6.65 21.1,6 20.71,5.63L18.37,3.29C18,2.9 17.35,2.9 16.96,3.29L15.12,5.12L18.87,8.87M3,17.25V21H6.75L17.81,9.93L14.06,6.18L3,17.25Z",
   chevron: "M7.41,8.58L12,13.17L16.59,8.58L18,10L12,16L6,10L7.41,8.58Z",
   drag: "M9,3H11V5H9V3M13,3H15V5H13V3M9,7H11V9H9V7M13,7H15V9H13V7M9,11H11V13H9V11M13,11H15V13H13V11M9,15H11V17H9V15M13,15H15V17H13V15M9,19H11V21H9V19M13,19H15V21H13V19Z",
@@ -34,9 +35,17 @@ const ICONS = {
   rule: "M11,15H6L13,1V9H18L11,23V15Z",
 };
 const DEFAULT_LINK_ICON = "mdi:link-variant";
+const DEFAULT_ACTION_ICON = "mdi:flash";
+// Gestures (v0.8): a hold fires after this long, a second tap counts as a double tap within this window, and a
+// finger or mouse that moves further than the slop is a drag, not a hold.
+const GESTURE_HOLD_MS = 500;
+const GESTURE_DOUBLE_MS = 250;
+const GESTURE_SLOP = 10;
 // A link row is HA's own panel row with this stand-in path (its id is "sidebar-panel-<LINK_ROW><id>"); its
 // address and target are set after each update.
 const LINK_ROW = "esp-link-";
+// An action row is the same kind of stand-in: its id is "sidebar-panel-<ACTION_ROW><id>".
+const ACTION_ROW = "esp-action-";
 const VIEWS_TTL_MS = 300000;
 
 const PANEL_ICONS = {
@@ -189,6 +198,59 @@ const STRINGS = {
     addLink: "Add link",
     addLinkShort: "Add link",
     newLink: "New link",
+    addActionShort: "Action",
+    addAction: "Add action",
+    newAction: "New action",
+    actionName: "Action name",
+    actionNameRequired: "Enter an action name",
+    actionIcon: "Icon (mdi:name)",
+    optRemoveAction: "Delete action",
+    removeAction: "Delete action {name}",
+    tapLabel: "When tapped",
+    holdLabel: "On hold",
+    doubleLabel: "On double tap",
+    actNone: "Nothing",
+    actToggle: "Toggle an entity",
+    actMoreInfo: "Show entity details",
+    actService: "Call a service",
+    actNavigate: "Open a page",
+    actEntity: "Entity",
+    actServiceField: "Service",
+    actData: "Service data (JSON, optional)",
+    actPath: "Page",
+    actServiceInvalid: "Use the form domain.service, for example light.turn_on",
+    actDataInvalid: "Enter a JSON object of at most 1000 characters, for example {\"brightness\": 128}",
+    actPathInvalid: "Enter a page of Home Assistant, starting with /",
+    gesturesHelp: "Hold: press and keep pressing, or Shift+Enter. Double tap: or Alt+Enter. A row with a double tap opens a quarter of a second after a single tap.",
+    ruleHeading: "Icon and colour by state",
+    ruleN: "State rule {n}",
+    ruleEntity: "Rule {n}: entity",
+    ruleWhen: "While the entity is",
+    ruleActive: "active (on, open, above 0)",
+    ruleInactive: "inactive",
+    ruleIcon: "Icon while it matches (mdi:name, optional)",
+    ruleColor: "Icon colour while it matches",
+    ruleAdd: "Add a state rule",
+    ruleRemove: "Remove state rule {n}",
+    ruleRemoveShort: "Remove rule",
+    labelField: "Name in the sidebar",
+    labelHelp: "Leave empty for Home Assistant's own name. The search also finds the original name.",
+    labelInvalid: "Use a name of 1 to 50 characters",
+    incomplete: "Finish or clear this option first: it cannot be saved yet.",
+    actionFailed: "The action failed",
+    holdDesc: "Hold or press Shift+Enter: {what}",
+    doubleDesc: "Double-tap or press Alt+Enter: {what}",
+    whatToggle: "toggle {entity}",
+    whatMoreInfo: "show details of {entity}",
+    whatService: "call {service}",
+    whatNavigate: "open {path}",
+    exportLayout: "Export layout",
+    importLayout: "Import layout",
+    exportDone: "Layout exported",
+    importDone: "Layout imported. Review it and press Done to save.",
+    importInvalid: "This file is not a layout of Easy Sidebar Pro",
+    importVersion: "This layout is from a newer version of Easy Sidebar Pro",
+    importTooBig: "The file is larger than 256 KB",
     options: "More options for {name}",
     optMore: "More",
     moveTo: "Move to",
@@ -331,6 +393,59 @@ const STRINGS = {
     addLink: "הוספת קישור",
     addLinkShort: "קישור",
     newLink: "קישור חדש",
+    addActionShort: "פעולה",
+    addAction: "הוספת פעולה",
+    newAction: "פעולה חדשה",
+    actionName: "שם הפעולה",
+    actionNameRequired: "הזינו שם לפעולה",
+    actionIcon: "סמל (mdi:name)",
+    optRemoveAction: "מחיקת הפעולה",
+    removeAction: "מחיקת הפעולה {name}",
+    tapLabel: "בלחיצה",
+    holdLabel: "בלחיצה ארוכה",
+    doubleLabel: "בלחיצה כפולה",
+    actNone: "כלום",
+    actToggle: "החלפת מצב של ישות",
+    actMoreInfo: "הצגת פרטי ישות",
+    actService: "הפעלת שירות",
+    actNavigate: "פתיחת דף",
+    actEntity: "ישות",
+    actServiceField: "שירות",
+    actData: "נתוני השירות (JSON, לא חובה)",
+    actPath: "דף",
+    actServiceInvalid: "כתבו בצורה domain.service, למשל light.turn_on",
+    actDataInvalid: "הזינו אובייקט JSON של עד 1000 תווים, למשל {\"brightness\": 128}",
+    actPathInvalid: "הזינו דף של Home Assistant, המתחיל ב-/",
+    gesturesHelp: "לחיצה ארוכה: להחזיק לחוץ, או Shift+Enter. לחיצה כפולה: או Alt+Enter. פריט עם לחיצה כפולה נפתח רבע שנייה אחרי לחיצה בודדת.",
+    ruleHeading: "סמל וצבע לפי מצב",
+    ruleN: "כלל מצב {n}",
+    ruleEntity: "כלל {n}: ישות",
+    ruleWhen: "כשהישות",
+    ruleActive: "פעילה (דלוקה, פתוחה, מעל 0)",
+    ruleInactive: "לא פעילה",
+    ruleIcon: "סמל כשהכלל מתקיים (mdi:name, לא חובה)",
+    ruleColor: "צבע הסמל כשהכלל מתקיים",
+    ruleAdd: "הוספת כלל מצב",
+    ruleRemove: "הסרת כלל מצב {n}",
+    ruleRemoveShort: "הסרת הכלל",
+    labelField: "שם בסרגל הצד",
+    labelHelp: "השאירו ריק לשם של Home Assistant. החיפוש מוצא גם את השם המקורי.",
+    labelInvalid: "הזינו שם של 1 עד 50 תווים",
+    incomplete: "השלימו או נקו את ההגדרה הזו קודם: אי אפשר לשמור אותה עדיין.",
+    actionFailed: "הפעולה נכשלה",
+    holdDesc: "לחיצה ארוכה או Shift+Enter: {what}",
+    doubleDesc: "לחיצה כפולה או Alt+Enter: {what}",
+    whatToggle: "החלפת מצב של {entity}",
+    whatMoreInfo: "הצגת פרטי {entity}",
+    whatService: "הפעלת {service}",
+    whatNavigate: "פתיחת {path}",
+    exportLayout: "ייצוא הפריסה",
+    importLayout: "ייבוא פריסה",
+    exportDone: "הפריסה יוצאה",
+    importDone: "הפריסה יובאה. בדקו אותה ולחצו על סיום כדי לשמור.",
+    importInvalid: "הקובץ הזה אינו פריסה של Easy Sidebar Pro",
+    importVersion: "הפריסה הזו היא מגרסה חדשה יותר של Easy Sidebar Pro",
+    importTooBig: "הקובץ גדול מ-256 KB",
     options: "אפשרויות נוספות עבור {name}",
     optMore: "אפשרויות נוספות",
     moveTo: "העברה אל",
@@ -442,7 +557,25 @@ function setText(el, text) {
 /** The layout path of one of HA's sidebar rows: its panel path, or "l:<id>" for a link row. */
 function rowPath(item) {
   const path = item.id.slice("sidebar-panel-".length);
-  return path.startsWith(LINK_ROW) ? L.linkPath(path.slice(LINK_ROW.length)) : path;
+  if (path.startsWith(LINK_ROW)) return L.linkPath(path.slice(LINK_ROW.length));
+  return path.startsWith(ACTION_ROW) ? L.actionPath(path.slice(ACTION_ROW.length)) : path;
+}
+
+/** The action being edited: an action row's tap, or a row's hold / double tap (name "hold" / "double_tap"). */
+function getAction(editor, key, name) {
+  return name === "tap" ? editor.meta.actions[L.actionId(key)]?.tap : editor.item(key)[name];
+}
+
+function putAction(editor, key, name, value) {
+  if (name === "tap") {
+    const row = editor.meta.actions[L.actionId(key)];
+    if (row && value) row.tap = value;
+    return;
+  }
+  const next = { ...editor.item(key) };
+  if (value) next[name] = value;
+  else delete next[name];
+  keepItem(editor, key, next);
 }
 
 /**
@@ -451,7 +584,11 @@ function rowPath(item) {
  */
 function keepItem(editor, key, next) {
   if (next.more_badges && !next.more_badges.length) delete next.more_badges;
-  if (L.cleanItem(next, key) || next.more_badges) editor.meta.items[key] = next;
+  if (next.state_rules && !next.state_rules.length) delete next.state_rules;
+  if (!next.label) delete next.label;
+  // Drafts (no entity yet...) are kept while editing; saving cleans them away and Done refuses to leave them.
+  const draft = next.more_badges || next.hold || next.double_tap || next.state_rules;
+  if (L.cleanItem(next, key) || draft) editor.meta.items[key] = next;
   else delete editor.meta.items[key];
 }
 
@@ -719,7 +856,7 @@ button { font: inherit; color: inherit; }
 .group[data-color] { border-inline-start: 4px solid var(--esp-own-line); }
 .group > .row.head .icon { color: var(--esp-own-icon-color, var(--sidebar-icon-color, var(--secondary-text-color))); }
 .row[data-item-color] > .icon { color: var(--esp-item-color); }
-.more-badge { display: grid; gap: 4px; border-inline-start: 2px solid var(--divider-color); padding-inline-start: 8px; }
+.action-edit, .more-badge { display: grid; gap: 4px; border-inline-start: 2px solid var(--divider-color); padding-inline-start: 8px; }
 .sub { color: var(--secondary-text-color); font-size: var(--ha-font-size-s, 12px); font-weight: var(--ha-font-weight-medium, 500); margin-top: 4px; }
 .swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(32px, 1fr)); gap: 2px; }
 .swatch { width: 32px; height: 32px; display: grid; place-items: center; border: none; background: none; border-radius: 50%; cursor: pointer; padding: 0; }
@@ -1029,13 +1166,19 @@ class EspEditor extends HTMLElement {
     return at.node.type === "group" ? at.node.name : this.infoOf(at.node.path).title;
   }
 
-  /** Title and icon of a panel or link row. */
+  /** Title and icon of a panel, link or action row (a panel's label, v0.8, is its title). */
   infoOf(path) {
     if (L.isLink(path)) {
       const link = this.meta?.links?.[L.linkId(path)];
       return { title: link?.name || t(this.lang, "newLink"), icon: link?.icon || DEFAULT_LINK_ICON, iconPath: null };
     }
-    return this.info.get(path) ?? { title: path, icon: null, iconPath: null };
+    if (L.isAction(path)) {
+      const row = this.meta?.actions?.[L.actionId(path)];
+      return { title: row?.name || t(this.lang, "newAction"), icon: row?.icon || DEFAULT_ACTION_ICON, iconPath: null };
+    }
+    const info = this.info.get(path) ?? { title: path, icon: null, iconPath: null };
+    const label = this.meta?.items?.[path]?.label;
+    return label ? { ...info, title: label } : info;
   }
 
   /** An entry's extras as edited (layout key: panel path, "l:<id>" or "g:<id>"). */
@@ -1231,6 +1374,7 @@ class EspEditor extends HTMLElement {
       { class: "adds" },
       addBtn("add", ICONS.plus, t(lang, "addGroupShort"), t(lang, "addGroup"), () => this.actions.addGroup()),
       addBtn("addlink", ICONS.link, t(lang, "addLinkShort"), t(lang, "addLink"), () => this.actions.addLink()),
+      addBtn("addaction", ICONS.flash, t(lang, "addActionShort"), t(lang, "addAction"), () => this.actions.addAction()),
     );
     const list = h("div", { class: "list", role: "list", "aria-labelledby": "esp-title" });
     for (const node of this.tree) {
@@ -1283,6 +1427,14 @@ class EspEditor extends HTMLElement {
         ),
       );
 
+    footer.append(
+      h(
+        "div",
+        { class: "footer-section" },
+        h("button", { class: "link", type: "button", "data-focus-key": "export", onclick: () => this.exportLayout() }, t(lang, "exportLayout")),
+        h("button", { class: "link", type: "button", "data-focus-key": "import", onclick: () => this.importLayout() }, t(lang, "importLayout")),
+      ),
+    );
     this._content.replaceChildren(bar, settings, add, list, footer.childElementCount ? footer : "");
 
     if (focusKey) {
@@ -1666,7 +1818,7 @@ class EspEditor extends HTMLElement {
   panelRow(node, groupId) {
     const lang = this.lang;
     const key = L.panelKey(node.path);
-    const link = L.isLink(node.path);
+    const link = L.isLink(node.path) || L.isAction(node.path);
     const info = this.infoOf(node.path);
     const hidden = !link && this.hiddenSet.has(node.path);
     const locked = this.lockedVisible.has(node.path);
@@ -1814,6 +1966,46 @@ class EspEditor extends HTMLElement {
         h("div", { class: "note" }, t(lang, "linkNewTabHelp")),
       );
     }
+    if (path && L.isAction(path)) {
+      const id = L.actionId(path);
+      const row = this.meta.actions[id] ?? {};
+      parts.push(
+        optField({
+          label: t(lang, "actionName"),
+          value: row.name,
+          focusKey: fk("name"),
+          errors,
+          row: key,
+          limit: L.MAX_NAME,
+          commit: (input) => this.actions.setActionRow(id, "name", input.value),
+        }),
+        optField({
+          label: t(lang, "actionIcon"),
+          value: row.icon ?? "",
+          focusKey: fk("icon"),
+          errors,
+          row: key,
+          dir: "ltr",
+          placeholder: DEFAULT_ACTION_ICON,
+          commit: (input) => this.actions.setActionRow(id, "icon", input.value),
+        }),
+        this.actionEditor(key, path, "tap", t(lang, "tapLabel"), row.tap ?? null, true),
+      );
+    }
+    if (path && !L.isLink(path) && !L.isAction(path))
+      parts.push(
+        optField({
+          label: t(lang, "labelField"),
+          help: t(lang, "labelHelp"),
+          value: item.label ?? "",
+          focusKey: fk("label"),
+          errors,
+          row: key,
+          limit: L.MAX_NAME,
+          placeholder: this.info.get(path)?.title ?? path,
+          commit: (input) => this.actions.setLabel(ikey, input.value),
+        }),
+      );
     if (path) {
       // Where the row is now: top level, a group, or the pinned area.
       const dests = [[null, t(lang, "moveTop")]];
@@ -1902,14 +2094,29 @@ class EspEditor extends HTMLElement {
         commit: (input) => this.actions.setItem(ikey, "aliases", input.value),
       }),
     );
-    if (path && L.isLink(path)) {
+    if (path) {
+      parts.push(
+        this.actionEditor(key, ikey, "hold", t(lang, "holdLabel"), item.hold ?? null, false),
+        this.actionEditor(key, ikey, "double_tap", t(lang, "doubleLabel"), item.double_tap ?? null, false),
+        h("div", { class: "note" }, t(lang, "gesturesHelp")),
+        ...this.stateRulesEditor(key, ikey, item),
+      );
+    }
+    if (path && (L.isLink(path) || L.isAction(path))) {
       const name = this.infoOf(path).title;
+      const action = L.isAction(path);
       parts.push(
         h(
           "button",
-          { class: "btn remove", type: "button", "aria-label": t(lang, "removeLink", { name }), "data-focus-key": fk("remove"), onclick: () => this.actions.removeLink(L.linkId(path)) },
+          {
+            class: "btn remove",
+            type: "button",
+            "aria-label": t(lang, action ? "removeAction" : "removeLink", { name }),
+            "data-focus-key": fk("remove"),
+            onclick: () => (action ? this.actions.removeAction(L.actionId(path)) : this.actions.removeLink(L.linkId(path))),
+          },
           svg(ICONS.delete),
-          t(lang, "optRemove"),
+          t(lang, action ? "optRemoveAction" : "optRemove"),
         ),
       );
     }
@@ -1941,6 +2148,200 @@ class EspEditor extends HTMLElement {
     }
     this._q(`[data-opts="${CSS.escape(key)}"]`)?.setAttribute("aria-label", t(this.lang, "options", { name: info.title }));
     this._q(`[data-focus-key="${CSS.escape(`opt:remove:${key}`)}"]`)?.setAttribute("aria-label", t(this.lang, "removeLink", { name: info.title }));
+  }
+
+  /**
+   * The fields of one action: its type, and what the type needs (entity, service and data, or a page). `name` is
+   * "tap" (an action row's tap, stored with the row), "hold" or "double_tap" (stored on the row's extras).
+   * The type select re-renders; the text fields commit in place like the other ⋮ fields.
+   */
+  actionEditor(key, ikey, name, label, action, tap) {
+    const lang = this.lang;
+    const fk = (field) => `opt:${name}-${field}:${key}`;
+    const kinds = tap ? L.TAP_TYPES : ["none", ...L.ACTION_TYPES];
+    const names = { none: "actNone", toggle: "actToggle", "more-info": "actMoreInfo", "call-service": "actService", navigate: "actNavigate" };
+    const type = action && kinds.includes(action.type) ? action.type : tap ? "toggle" : "none";
+    const errors = this.optErrors;
+    const field = (name2, labelKey, value, extra = {}) =>
+      optField({
+        label: t(lang, labelKey),
+        value,
+        focusKey: fk(name2),
+        errors,
+        row: key,
+        dir: "ltr",
+        commit: (input) => this.actions.setActionField(ikey, name, name2, input.value),
+        ...extra,
+      });
+    const parts = [
+      h(
+        "label",
+        { class: "field" },
+        h("span", {}, label),
+        h(
+          "select",
+          { "data-focus-key": fk("type"), onchange: (e) => this.actions.setActionType(ikey, name, e.target.value) },
+          kinds.map((kind) => h("option", { value: kind, ".selected": kind === type }, t(lang, names[kind]))),
+        ),
+      ),
+    ];
+    if (type === "toggle" || type === "more-info" || type === "call-service")
+      parts.push(
+        field("entity", "actEntity", action?.entity ?? "", {
+          dir: "auto",
+          suggest: (text) => L.matchEntities(this.entityChoices, text),
+          placeholder: "light.living_room",
+          warn: (v) => (L.unknownEntity(v, this.hass?.states) ? t(lang, "entityMissing") : ""),
+        }),
+      );
+    if (type === "call-service")
+      parts.push(
+        field("service", "actServiceField", action?.service ?? "", { placeholder: "light.turn_on" }),
+        field("data", "actData", action?.data ? JSON.stringify(action.data) : "", { placeholder: '{"brightness": 128}' }),
+      );
+    if (type === "navigate") parts.push(field("path", "actPath", action?.path ?? "", { placeholder: "/config/automation" }));
+    return h("div", { class: "action-edit", role: "group", "aria-label": label }, parts);
+  }
+
+  /** The state rules of a row: while an entity is active / inactive, its icon and / or icon colour change. */
+  stateRulesEditor(key, ikey, item) {
+    const lang = this.lang;
+    const rules = item.state_rules ?? [];
+    const fk = (field) => `opt:${field}:${key}`;
+    const out = [h("div", { class: "sub" }, t(lang, "ruleHeading"))];
+    rules.forEach((rule, i) => {
+      const f = `rule${i}`;
+      out.push(
+        h(
+          "div",
+          { class: "more-badge", role: "group", "aria-label": t(lang, "ruleN", { n: i + 1 }) },
+          optField({
+            label: t(lang, "ruleEntity", { n: i + 1 }),
+            value: rule.entity,
+            focusKey: fk(`${f}-entity`),
+            errors: this.optErrors,
+            row: key,
+            dir: "auto",
+            suggest: (text) => L.matchEntities(this.entityChoices, text),
+            placeholder: "binary_sensor.front_door",
+            warn: (v) => (L.unknownEntity(v, this.hass?.states) ? t(lang, "entityMissing") : ""),
+            commit: (input) => this.actions.setRule(ikey, i, "entity", input.value),
+          }),
+          h(
+            "label",
+            { class: "field" },
+            h("span", {}, t(lang, "ruleWhen")),
+            h(
+              "select",
+              { "data-focus-key": fk(`${f}-when`), onchange: (e) => this.actions.setRule(ikey, i, "when", e.target.value) },
+              L.STATE_RULE_WHEN.map((w) => h("option", { value: w, ".selected": (rule.when ?? "active") === w }, t(lang, w === "active" ? "ruleActive" : "ruleInactive"))),
+            ),
+          ),
+          optField({
+            label: t(lang, "ruleIcon"),
+            value: rule.icon ?? "",
+            focusKey: fk(`${f}-icon`),
+            errors: this.optErrors,
+            row: key,
+            dir: "ltr",
+            placeholder: "mdi:door-open",
+            commit: (input) => this.actions.setRule(ikey, i, "icon", input.value),
+          }),
+          this.colorPicker({ id: ikey, field: f, labelKey: "ruleColor", value: rule.color ?? null, set: (color) => this.actions.setRule(ikey, i, "color", color) }),
+          h(
+            "button",
+            { class: "btn remove", type: "button", "aria-label": t(lang, "ruleRemove", { n: i + 1 }), "data-focus-key": fk(`rm${f}`), onclick: () => this.actions.removeRule(ikey, i) },
+            svg(ICONS.delete),
+            t(lang, "ruleRemoveShort"),
+          ),
+        ),
+      );
+    });
+    if (rules.length < L.MAX_STATE_RULES)
+      out.push(h("button", { class: "btn", type: "button", "data-focus-key": fk("addrule"), onclick: () => this.actions.addRule(ikey) }, t(lang, "ruleAdd")));
+    return out;
+  }
+
+  /** An action row's name or icon changed: update its row in place. */
+  patchAction(id) {
+    const path = L.actionPath(id);
+    const key = L.panelKey(path);
+    const row = this._q(`.row[data-key="${CSS.escape(key)}"]`);
+    if (!row) return;
+    const info = this.infoOf(path);
+    const title = row.querySelector(".title");
+    if (title && title.textContent !== info.title) title.textContent = info.title;
+    const icon = row.querySelector("ha-icon.icon");
+    if (icon) icon.icon = info.icon;
+    this._q(`[data-opts="${CSS.escape(key)}"]`)?.setAttribute("aria-label", t(this.lang, "options", { name: info.title }));
+  }
+
+  /** A panel's label changed: its row shows the new name at once. */
+  patchLabel(path) {
+    const row = this._q(`.row[data-key="${CSS.escape(L.panelKey(path))}"]`);
+    const title = row?.querySelector(".title");
+    const text = this.infoOf(path).title;
+    if (title && title.textContent !== text) title.textContent = text;
+    this._q(`[data-opts="${CSS.escape(L.panelKey(path))}"]`)?.setAttribute("aria-label", t(this.lang, "options", { name: text }));
+  }
+
+  /**
+   * An action row, hold, double tap or state rule that cannot be saved yet: open that row's options at the first field
+   * it still needs and say so. Returns whether one did (Done refuses then).
+   */
+  focusIncomplete() {
+    const missing = (a) => (!a ? "type" : a.type === "toggle" || a.type === "more-info" ? "entity" : a.type === "call-service" ? (a.service ? "data" : "service") : "path");
+    for (const path of L.flatten(this.tree)) {
+      const key = L.panelKey(path);
+      const id = L.actionId(path);
+      const item = this.item(path);
+      let focusKey = null;
+      if (id !== null && !L.cleanActionRow(this.meta.actions[id])) focusKey = `opt:tap-${missing(this.meta.actions[id]?.tap)}:${key}`;
+      for (const name of ["hold", "double_tap"]) if (!focusKey && item[name] && !L.cleanAction(item[name])) focusKey = `opt:${name}-${missing(item[name])}:${key}`;
+      (item.state_rules ?? []).forEach((rule, i) => {
+        if (!focusKey && !L.cleanStateRules([rule]).length) focusKey = `opt:rule${i}-${L.validEntity(rule.entity) ? "icon" : "entity"}:${key}`;
+      });
+      if (!focusKey) continue;
+      this.set({ optionsOpen: key, error: t(this.lang, "incomplete") }, focusKey);
+      return true;
+    }
+    return false;
+  }
+
+  /** Download the layout as the editor holds it (not yet saved) as a JSON file. */
+  exportLayout() {
+    const layout = L.toLayout(this.tree, this.settings, this.meta);
+    const url = URL.createObjectURL(new Blob([JSON.stringify(layout, null, 2)], { type: "application/json" }));
+    const link = h("a", { href: url, download: "easy-sidebar-pro-layout.json" });
+    this.shadowRoot.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    this.announce(t(this.lang, "exportDone"));
+  }
+
+  /** Load a layout file into the editor like unsaved changes; the server validates it again when Done saves. */
+  importLayout() {
+    const input = h("input", { type: "file", accept: "application/json,.json" });
+    input.addEventListener("change", async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      const fail = (message) => this.set({ error: t(this.lang, message), status: "" }, "import");
+      if (file.size > L.MAX_IMPORT_BYTES) return fail("importTooBig");
+      let data;
+      try {
+        data = JSON.parse(await file.text());
+      } catch {
+        return fail("importInvalid");
+      }
+      const problem = L.checkImport(data);
+      if (problem) return fail(problem === "version" ? "importVersion" : "importInvalid");
+      this.set(
+        { tree: L.buildTree(data, [...this.info.keys()], true), settings: L.cleanSettings(data.settings), meta: L.metaOf(data), optionsOpen: null, error: "", status: t(this.lang, "importDone") },
+        "import",
+      );
+    });
+    input.click();
   }
 
   /** A ⋮ option field shows an error: open that row's options, focus the field and say it again. Returns whether one did. */
@@ -2537,6 +2938,7 @@ class Controller {
 
   disconnect() {
     this.clearTabs();
+    this.cancelGestures();
     live.delete(this);
     if (this.onLocation) {
       window.removeEventListener("location-changed", this.onLocation);
@@ -2638,7 +3040,8 @@ class Controller {
     this.watch = L.watchedEntities(layout);
     this.seen = new Map(this.watch.map((e) => [e, states[e]]));
     const off = L.hiddenByCondition(layout, (e) => L.entityActive(states[e]));
-    const visible = (this.visible = [...byPath.keys(), ...L.linkPaths(layout)].filter((p) => !off.has(p)));
+    const visible = (this.visible = [...byPath.keys(), ...L.linkPaths(layout), ...L.actionPaths(layout)].filter((p) => !off.has(p)));
+    this.decorate(layout, visible, states);
     // An internal link whose page is open is the selected row (the longest match), instead of HA's panel.
     const at = (this.renderedLink = L.linkAt(layout?.links, location.pathname));
     selected = at && visible.includes(at) ? at : selected;
@@ -2663,8 +3066,9 @@ class Controller {
     let rows;
     if (searching) {
       // Words a row is found by: its shown name, HA's own (untranslated) title and its path; a link's name and address.
-      const words = new Map(panels.map((p) => [p.url_path, [panelTitle(this.hass, p), p.title ?? "", p.url_path]]));
+      const words = new Map(panels.map((p) => [p.url_path, [layout?.items?.[p.url_path]?.label ?? "", panelTitle(this.hass, p), p.title ?? "", p.url_path]]));
       for (const [id, link] of Object.entries(layout?.links ?? {})) words.set(L.linkPath(id), [link.name, link.url]);
+      for (const [id, row] of Object.entries(layout?.actions ?? {})) words.set(L.actionPath(id), [row.name]);
       this.loadViews();
       rows = L.searchRows(layout, visible, words, this.query, selected, [], this.views ?? []);
     } else rows = L.arrange(layout, visible, this.collapsed, selected);
@@ -2689,7 +3093,11 @@ class Controller {
     this.groupLooks = new Map(rows.filter((r) => r.type === "group").map((r) => [r.id, this.look(r.color, r.icon_color, this.settings.header)]));
     // A row's own icon colour (v0.6) wins over its group's icon colour.
     this.itemTones = new Map();
-    for (const p of visible) if (items[p]?.color) this.itemTones.set(p, this.look(null, items[p].color)?.member ?? null);
+    // A state rule's colour (v0.8) wins over the row's own.
+    for (const p of visible) {
+      const color = this.looks.get(p)?.color ?? items[p]?.color;
+      if (color) this.itemTones.set(p, this.look(null, color)?.member ?? null);
+    }
     this.lastInGroup = new Set(rows.filter((r) => r.type === "panel" && r.last).map((r) => r.path));
     // HA sets the page direction on <html dir>; reading it avoids a style recalculation per render.
     const dir = document.documentElement.dir;
@@ -2767,15 +3175,51 @@ class Controller {
     return el;
   }
 
-  /** The panel object HA's `_renderPanel` draws for a row: the panel itself, or a stand-in for a link. */
+  /**
+   * The panel object HA's `_renderPanel` draws for a row: the panel itself, or a stand-in for a link or an action row.
+   * A panel's own name (label) and a matching state rule's icon (v0.8) are laid over it.
+   */
   panelFor(path) {
-    if (!L.isLink(path)) return this.byPath.get(path);
-    const link = this.data?.layout?.links?.[L.linkId(path)] ?? {};
-    return { url_path: `${LINK_ROW}${L.linkId(path)}`, title: link.name ?? "", icon: link.icon || DEFAULT_LINK_ICON };
+    const layout = this.data?.layout;
+    let panel;
+    if (L.isAction(path)) {
+      const row = layout?.actions?.[L.actionId(path)] ?? {};
+      panel = { url_path: `${ACTION_ROW}${L.actionId(path)}`, title: row.name ?? "", icon: row.icon || DEFAULT_ACTION_ICON };
+    } else if (L.isLink(path)) {
+      const link = layout?.links?.[L.linkId(path)] ?? {};
+      panel = { url_path: `${LINK_ROW}${L.linkId(path)}`, title: link.name ?? "", icon: link.icon || DEFAULT_LINK_ICON };
+    } else {
+      panel = this.byPath.get(path);
+      const label = panel && layout?.items?.[path]?.label;
+      if (label) panel = { ...panel, title: label };
+    }
+    const icon = this.looks?.get(path)?.icon;
+    return panel && icon ? { ...panel, icon } : panel;
+  }
+
+  /** Per-row look and gestures from the layout (v0.8): state rules (icon, colour) and tap / hold / double tap. */
+  decorate(layout, visible, states) {
+    const items = layout?.items ?? {};
+    const active = (e) => L.entityActive(states[e]);
+    this.looks = new Map();
+    this.gestures = new Map();
+    for (const p of visible) {
+      const look = L.ruleLook(items[p], active);
+      if (look) this.looks.set(p, look);
+      const tap = L.isAction(p) ? L.cleanAction(layout?.actions?.[L.actionId(p)]?.tap, true) : null;
+      const hold = L.cleanAction(items[p]?.hold);
+      const dbl = L.cleanAction(items[p]?.double_tap);
+      if (tap || hold || dbl) this.gestures.set(p, { tap, hold, dbl });
+    }
   }
 
   /** Open a row: a panel or a dashboard view inside HA; a link at its address (a new browser tab when set, or for a web address). */
   go(path) {
+    if (L.isAction(path)) {
+      const tap = L.cleanAction(this.data?.layout?.actions?.[L.actionId(path)]?.tap, true);
+      if (tap) this.runAction(tap);
+      return;
+    }
     if (!L.isLink(path)) return navigate(`/${path}`);
     const link = this.data?.layout?.links?.[L.linkId(path)];
     if (!link) return;
@@ -2956,12 +3400,15 @@ class Controller {
     if (!root.adoptedStyleSheets.includes(sidebarSheet)) root.adoptedStyleSheets = [...root.adoptedStyleSheets, sidebarSheet];
     const divider = this.editing ? "line" : this.settings.divider;
     if (this.sb.getAttribute("data-esp-divider") !== divider) this.sb.setAttribute("data-esp-divider", divider);
+    this.installGestures(root);
     // Links (address, new tab) and badges, in the main list and the pinned grid.
     if (!this.editing)
       for (const item of root.querySelectorAll('ha-list-nav ha-list-item-button[id^="sidebar-panel-"]')) {
         const path = rowPath(item);
         if (L.isLink(path)) this.linkItem(item, path);
+        if (L.isAction(path) && item.href) item.href = undefined;
         setBadge(item, this.badges?.get(path) ?? null, this.lang);
+        setAttr(item, "aria-description", this.gestureHint(path));
       }
     for (const item of root.querySelectorAll('ha-list-nav.before-spacer ha-list-item-button[id^="sidebar-panel-"]')) {
       const path = rowPath(item);
@@ -3051,6 +3498,162 @@ class Controller {
       setAttr(edit, "aria-label", editLabel);
       if (edit.title !== editLabel) edit.title = editLabel;
     }
+  }
+
+  /* ---------------- actions and gestures (v0.8) */
+
+  /** What an action does, in words (the row's description for assistive technology). */
+  describeAction(action) {
+    const name = (e) => this.hass?.states?.[e]?.attributes?.friendly_name || e;
+    switch (action.type) {
+      case "toggle":
+        return t(this.lang, "whatToggle", { entity: name(action.entity) });
+      case "more-info":
+        return t(this.lang, "whatMoreInfo", { entity: name(action.entity) });
+      case "call-service":
+        return t(this.lang, "whatService", { service: action.service });
+      default:
+        return t(this.lang, "whatNavigate", { path: action.path });
+    }
+  }
+
+  /** The keyboard ways to a row's hold and double tap, as a description; null when it has neither. */
+  gestureHint(path) {
+    const cfg = this.gestures?.get(path);
+    const parts = [];
+    if (cfg?.hold) parts.push(t(this.lang, "holdDesc", { what: this.describeAction(cfg.hold) }));
+    if (cfg?.dbl) parts.push(t(this.lang, "doubleDesc", { what: this.describeAction(cfg.dbl) }));
+    return parts.length ? parts.join(". ") : null;
+  }
+
+  /** Run an action as the signed-in user; Home Assistant's own permission checks apply. A failure shows as HA's toast. */
+  runAction(action) {
+    const fail = (err) => this.toast(err?.message || t(this.lang, "actionFailed"));
+    try {
+      if (action.type === "toggle") this.hass.callService("homeassistant", "toggle", { entity_id: action.entity }).catch(fail);
+      else if (action.type === "more-info") this.sb.dispatchEvent(new CustomEvent("hass-more-info", { detail: { entityId: action.entity }, bubbles: true, composed: true }));
+      else if (action.type === "call-service") {
+        const [domain, service] = action.service.split(".");
+        this.hass.callService(domain, service, { ...(action.data ?? {}), ...(action.entity ? { entity_id: action.entity } : {}) }).catch(fail);
+      } else navigate(action.path);
+    } catch (err) {
+      fail(err);
+    }
+  }
+
+  toast(message) {
+    this.sb.dispatchEvent(new CustomEvent("hass-notification", { detail: { message }, bubbles: true, composed: true }));
+  }
+
+  cancelHold() {
+    if (this.hold) clearTimeout(this.hold.timer);
+    this.hold = null;
+  }
+
+  cancelGestures() {
+    this.cancelHold();
+    clearTimeout(this.suppressTimer);
+    this.suppress = null;
+    if (this.pendingTap) clearTimeout(this.pendingTap.timer);
+    this.pendingTap = null;
+  }
+
+  /**
+   * One set of listeners on the sidebar's shadow root (capture phase, so a handled gesture never reaches HA's own row):
+   * a hold (press and keep, or Shift+Enter / the menu key), a double tap (or Alt+Enter), and the tap of an action row.
+   * Only rows with a configured gesture are touched; the single tap of a row with a double tap waits for the window.
+   */
+  installGestures(root) {
+    if (this.gestureRoot === root) return;
+    this.gestureRoot = root;
+    const find = (e) => {
+      if (this.editing) return null;
+      const row = e.composedPath().find((el) => el.localName === "ha-list-item-button" && typeof el.id === "string" && el.id.startsWith("sidebar-panel-"));
+      if (!row) return null;
+      const path = rowPath(row);
+      return { row, path, cfg: this.gestures?.get(path) ?? null };
+    };
+    const capture = { capture: true };
+    root.addEventListener(
+      "pointerdown",
+      (e) => {
+        this.cancelHold();
+        if (!e.isPrimary || e.button !== 0) return;
+        const hit = find(e);
+        if (!hit?.cfg?.hold) return;
+        this.hold = {
+          x: e.clientX,
+          y: e.clientY,
+          timer: setTimeout(() => {
+            this.hold = null;
+            // The click that ends this press must not also open the row.
+            this.suppress = hit.row;
+            clearTimeout(this.suppressTimer);
+            this.suppressTimer = setTimeout(() => (this.suppress = null), 1500);
+            this.runAction(hit.cfg.hold);
+          }, GESTURE_HOLD_MS),
+        };
+      },
+      capture,
+    );
+    root.addEventListener(
+      "pointermove",
+      (e) => {
+        if (this.hold && Math.hypot(e.clientX - this.hold.x, e.clientY - this.hold.y) > GESTURE_SLOP) this.cancelHold();
+      },
+      capture,
+    );
+    for (const type of ["pointerup", "pointercancel"]) root.addEventListener(type, () => this.cancelHold(), capture);
+    // A long press opens the browser's menu on touch screens: not on a row that has a hold.
+    root.addEventListener("contextmenu", (e) => find(e)?.cfg?.hold && e.preventDefault(), capture);
+    root.addEventListener("click", (e) => this.rowClick(e, find(e)), capture);
+    root.addEventListener(
+      "keydown",
+      (e) => {
+        const cfg = find(e)?.cfg;
+        if (!cfg) return;
+        const holdKey = (e.key === "Enter" && e.shiftKey && !e.altKey) || e.key === "ContextMenu" || (e.key === "F10" && e.shiftKey);
+        const action = cfg.hold && holdKey ? cfg.hold : cfg.dbl && e.key === "Enter" && e.altKey ? cfg.dbl : null;
+        if (!action) return;
+        e.preventDefault();
+        e.stopPropagation();
+        this.runAction(action);
+      },
+      capture,
+    );
+  }
+
+  rowClick(e, hit) {
+    if (!hit) return;
+    if (this.suppress === hit.row) {
+      this.suppress = null;
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+    const cfg = hit.cfg;
+    if (!cfg || (!cfg.tap && !cfg.dbl)) return;
+    // Open in a new tab, download...: left to the browser, except that an action row never navigates.
+    const plain = e.button === 0 && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey;
+    if (!plain && !cfg.tap) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (!plain) return;
+    const single = () => (cfg.tap ? this.runAction(cfg.tap) : this.go(hit.path));
+    if (!cfg.dbl) return single();
+    if (this.pendingTap?.row === hit.row) {
+      clearTimeout(this.pendingTap.timer);
+      this.pendingTap = null;
+      return this.runAction(cfg.dbl);
+    }
+    if (this.pendingTap) clearTimeout(this.pendingTap.timer);
+    this.pendingTap = {
+      row: hit.row,
+      timer: setTimeout(() => {
+        this.pendingTap = null;
+        single();
+      }, GESTURE_DOUBLE_MS),
+    };
   }
 
   /**
@@ -3188,7 +3791,8 @@ class Controller {
         const link = L.isLink(path) ? links[L.linkId(path)] : null;
         if (link) return { path, href: link.url, newTab: L.isExternal(link.url) || link.new_tab === true, title: link.name, icon: link.icon || DEFAULT_LINK_ICON };
         const panel = this.byPath.get(path) ?? { url_path: path };
-        return { path, href: `/${path}`, newTab: false, title: panelTitle(hass, panel), icon: panelIcon(panel) };
+        const label = this.data?.layout?.items?.[path]?.label;
+        return { path, href: `/${path}`, newTab: false, title: label || panelTitle(hass, panel), icon: panelIcon(panel) };
       }),
     });
   }
@@ -3263,7 +3867,9 @@ class Controller {
     const info = new Map();
     for (const p of all) {
       const el = this.sb.shadowRoot.getElementById(`sidebar-panel-${p.url_path}`);
-      const title = el?.querySelector(".item-text")?.textContent?.trim() || panelTitle(hass, p);
+      // A row with a label shows the label: the editor wants HA's own name (the label is laid over it).
+      const labelled = !!this.data?.layout?.items?.[p.url_path]?.label;
+      const title = (!labelled && el?.querySelector(".item-text")?.textContent?.trim()) || panelTitle(hass, p);
       // The icon HA's own row shows (built-in panels draw an SVG path, not panel.icon).
       const iconPath = el?.querySelector('ha-svg-icon[slot="start"]')?.path || null;
       const icon =
@@ -3334,7 +3940,7 @@ class Controller {
     return {
       done: () => {
         const e = ed();
-        if (e.focusInvalidName() || e.focusInvalidOption() || e.focusInvalidLink()) return;
+        if (e.focusInvalidName() || e.focusInvalidOption() || e.focusInvalidLink() || e.focusIncomplete()) return;
         const kind = L.editKind(this.edit.baseTree, e.tree, this.edit.baseHidden, e.hiddenSet, this.edit.baseSettings, e.settings, this.edit.baseMeta, e.meta);
         if (kind === "none") return this.stopEdit();
         const onDefault = !this.data.own && !!this.data.default;
@@ -3468,6 +4074,134 @@ class Controller {
         keepItem(e, ikey, next);
         e.patchItemColor(ikey);
       },
+      // A new action row starts with its options open on its tap (it cannot be saved without one).
+      addAction: () => {
+        const e = ed();
+        if (Object.keys(e.meta.actions).length >= L.MAX_ACTIONS) return;
+        const used = new Set([...Object.keys(e.meta.links), ...Object.keys(e.meta.actions), ...e.tree.filter((n) => n.type === "group").map((n) => n.id)]);
+        let id;
+        do id = L.newGroupId(e.tree);
+        while (used.has(id));
+        e.meta.actions[id] = { name: t(lang(), "newAction"), icon: null, tap: { type: "toggle" } };
+        const key = L.panelKey(L.actionPath(id));
+        e.set({ tree: L.addAction(e.tree, id), optionsOpen: key }, `opt:tap-entity:${key}`);
+      },
+      /** An action row's name or icon; returns an error text for the field ("" when it was taken). */
+      setActionRow: (id, field, value) => {
+        const e = ed();
+        const row = e.meta.actions[id];
+        if (!row) return "";
+        if (field === "name") {
+          const name = L.cleanName(value);
+          if (!name) return t(lang(), "actionNameRequired");
+          row.name = name;
+        } else {
+          const icon = String(value ?? "").trim() || null;
+          if (icon !== null && !L.validIcon(icon)) return t(lang(), "iconInvalid");
+          row.icon = icon;
+        }
+        e.patchAction(id);
+        return "";
+      },
+      removeAction: (id) => {
+        const e = ed();
+        const path = L.actionPath(id);
+        const name = e.infoOf(path).title;
+        const tree = L.removeEntry(e.tree, L.panelKey(path));
+        delete e.meta.actions[id];
+        delete e.meta.items[path];
+        e.set({ tree, optionsOpen: null }, "addaction");
+        e.announce(t(lang(), "removed", { name }));
+      },
+      /** The type of an action (tap of an action row, hold or double tap of a row); the visible fields change, so it re-renders. */
+      setActionType: (ikey, name, type) => {
+        const e = ed();
+        const cur = getAction(e, ikey, name);
+        const next = type === "none" ? null : type === cur?.type ? cur : { type, ...(cur?.entity && type !== "navigate" ? { entity: cur.entity } : {}) };
+        putAction(e, ikey, name, next);
+        e.set({}, `opt:${name}-type:${L.panelKey(ikey)}`);
+      },
+      /** One text field of an action; returns an error text for the field ("" when it was taken). */
+      setActionField: (ikey, name, field, value) => {
+        const e = ed();
+        const cur = { ...(getAction(e, ikey, name) ?? {}) };
+        const text = String(value ?? "").trim();
+        if (field === "entity") {
+          const id = text.toLowerCase();
+          if (id && !L.validEntity(id)) return t(lang(), "entityInvalid");
+          if (id) cur.entity = id;
+          else delete cur.entity;
+        } else if (field === "service") {
+          if (text && !/^[a-z0-9_]{1,64}\.[a-z0-9_]{1,64}$/.test(text)) return t(lang(), "actServiceInvalid");
+          if (text) cur.service = text;
+          else delete cur.service;
+        } else if (field === "data") {
+          if (!text) delete cur.data;
+          else {
+            let data;
+            try {
+              data = JSON.parse(text);
+            } catch {
+              return t(lang(), "actDataInvalid");
+            }
+            if (!data || typeof data !== "object" || Array.isArray(data) || L.cpLength(JSON.stringify(data)) > L.MAX_ACTION_DATA) return t(lang(), "actDataInvalid");
+            cur.data = data;
+          }
+        } else if (field === "path") {
+          if (text && !(text.startsWith("/") && L.validUrl(text) && !L.isExternal(text))) return t(lang(), "actPathInvalid");
+          if (text) cur.path = text;
+          else delete cur.path;
+        }
+        putAction(e, ikey, name, cur);
+        return "";
+      },
+      /** A panel's own name (empty = HA's); returns an error text or "". */
+      setLabel: (ikey, value) => {
+        const e = ed();
+        const text = String(value ?? "").trim();
+        const label = text ? L.cleanName(text) : "";
+        if (text && !label) return t(lang(), "labelInvalid");
+        keepItem(e, ikey, { ...e.item(ikey), label });
+        e.patchLabel(ikey);
+        return "";
+      },
+      addRule: (ikey) => {
+        const e = ed();
+        const rules = [...(e.item(ikey).state_rules ?? [])];
+        if (rules.length >= L.MAX_STATE_RULES) return;
+        rules.push({ entity: "", when: "active", icon: null, color: null });
+        keepItem(e, ikey, { ...e.item(ikey), state_rules: rules });
+        e.set({}, `opt:rule${rules.length - 1}-entity:${L.panelKey(ikey)}`);
+      },
+      removeRule: (ikey, i) => {
+        const e = ed();
+        keepItem(e, ikey, { ...e.item(ikey), state_rules: (e.item(ikey).state_rules ?? []).filter((_, j) => j !== i) });
+        e.set({}, `opt:addrule:${L.panelKey(ikey)}`);
+      },
+      /** One field of a state rule; returns an error text for a text field ("" when taken). */
+      setRule: (ikey, i, field, value) => {
+        const e = ed();
+        const rules = (e.item(ikey).state_rules ?? []).map((r) => ({ ...r }));
+        if (!rules[i]) return "";
+        if (field === "entity") {
+          const id = String(value ?? "").trim().toLowerCase();
+          if (id && !L.validEntity(id)) return t(lang(), "entityInvalid");
+          rules[i].entity = id;
+        } else if (field === "icon") {
+          const icon = String(value ?? "").trim() || null;
+          if (icon !== null && !L.validIcon(icon)) return t(lang(), "iconInvalid");
+          rules[i].icon = icon;
+        } else if (field === "when") {
+          if (!L.STATE_RULE_WHEN.includes(value)) return "";
+          rules[i].when = value;
+        } else {
+          if (!L.validColor(value)) return "";
+          rules[i].color = value;
+        }
+        keepItem(e, ikey, { ...e.item(ikey), state_rules: rules });
+        if (field === "color") e.syncPicker(`rule${i}`, ikey, value);
+        return "";
+      },
       rename: (id, input) => {
         const e = ed();
         const name = L.cleanName(input.value);
@@ -3561,7 +4295,7 @@ class Controller {
       },
       setDefault: async () => {
         const e = ed();
-        if (e.focusInvalidName() || e.focusInvalidOption() || e.focusInvalidLink()) return;
+        if (e.focusInvalidName() || e.focusInvalidOption() || e.focusInvalidLink() || e.focusIncomplete()) return;
         if (!(await this.save(e.tree, e.hiddenSet, false))) return e.set({ confirming: null });
         try {
           await this.hass.callWS({ type: `${DOMAIN}/default/set`, layout: L.toLayout(e.tree, e.settings, e.meta) });
