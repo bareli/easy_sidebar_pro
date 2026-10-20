@@ -18,11 +18,11 @@ const hex = (s) => [1, 3, 5].map((i) => parseInt(s.slice(i, i + 2), 16));
 const mixBlack = (c, p) => c.map((v) => Math.round(v * p));
 
 test("#40 our badges (rows and group header) use the accent mixed 60% with black under white text", () => {
-  const fill = /background-color: color-mix\(in srgb, var\(--accent-color\) 60%, black\); color: #fff;/;
+  const fill = /background-color: color-mix\(in srgb, var\(--esp-badge-color, var\(--accent-color\)\) 60%, black\); color: #fff;/;
   const group = SRC.slice(SRC.indexOf("const GROUP_CSS"), SRC.indexOf("class EspGroup"));
   assert.match(group.match(/\n\.badge \{[^}]*\}/)[0], fill);
   const side = SRC.slice(SRC.indexOf("const SIDEBAR_CSS"), SRC.indexOf("let sidebarSheet"));
-  assert.match(side, /ha-list-item-button > \.badge\.esp-badge \{[^}]*color-mix\(in srgb, var\(--accent-color\) 60%, black\); color: #fff; \}/);
+  assert.match(side, /ha-list-item-button > \.badge\.esp-badge \{[^}]*color-mix\(in srgb, var\(--esp-badge-color, var\(--accent-color\)\) 60%, black\); color: #fff; \}/);
   // HA's own badges (Settings) are not restyled: only .esp-badge.
   assert.doesNotMatch(side, /(^|\n)\.badge \{/);
 });
@@ -211,7 +211,7 @@ test("#53 the marker and dimming are applied when rows are built and patched in 
   assert.match(SRC, /this\.applyRule\(row, L\.itemKey\(key\)\);\n\s+this\.applyItemColor\(row, L\.itemKey\(key\)\);\n\s+return this\.optionsOpen === key/);
   assert.match(SRC, /this\.applyRule\(head, key\);/);
   // setItem patches the row in place (no editor re-render that drops focus).
-  const setItem = SRC.slice(SRC.indexOf("      setItem: (ikey, field, value) => {"), SRC.indexOf("      rename: (id, input) => {"));
+  const setItem = SRC.slice(SRC.indexOf("      setItem: (ikey, field, value) => {"), SRC.indexOf("      /** The colour of an entry's own badge"));
   assert.match(setItem, /e\.patchRule\(ikey\);/);
   assert.doesNotMatch(setItem, /e\.set\(|\.render\(\)/);
 });

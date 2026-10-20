@@ -34,7 +34,10 @@ DIVIDER_STYLES = ("line", "none")
 GROUP_KEYS = ("name", "icon", "color", "icon_color", "start_open", "tabbed", "panels")
 # Keys of a stored link and of an entry's extras (layout.js LINK_KEYS / ITEM_KEYS).
 LINK_KEYS = ("name", "icon", "url", "new_tab")
-ITEM_KEYS = ("badge", "show_when", "aliases", "color")
+ITEM_KEYS = ("badge", "show_when", "aliases", "color", "badge_color", "more_badges")
+# Extra badges beside an entry's own (layout.js MAX_MORE_BADGES); keys of one of them.
+MAX_MORE_BADGES = 3
+MORE_BADGE_KEYS = ("entity", "color")
 DEFAULT_SETTINGS = {
     "start_collapsed": False,
     "accordion": False,

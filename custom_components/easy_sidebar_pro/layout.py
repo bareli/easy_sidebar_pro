@@ -16,6 +16,8 @@ from .const import (
     LINK_PREFIX,
     MAX_ALIASES,
     MAX_ENTRIES,
+    MAX_MORE_BADGES,
+    MORE_BADGE_KEYS,
     MAX_GROUPS,
     MAX_LINKS,
     MAX_NAME,
@@ -149,6 +151,24 @@ def _aliases(value: Any, where: str) -> str:
     return " ".join(value.split())
 
 
+def _more_badges(value: Any, where: str) -> list[dict[str, Any]]:
+    """Up to MAX_MORE_BADGES extra badges, each an entity and an optional colour."""
+    if value is None:
+        return []
+    if not isinstance(value, list) or len(value) > MAX_MORE_BADGES:
+        raise LayoutError(f"{where}: at most {MAX_MORE_BADGES} extra badges")
+    out = []
+    for i, badge in enumerate(value):
+        at = f"{where}[{i}]"
+        if not isinstance(badge, dict) or set(badge) - set(MORE_BADGE_KEYS):
+            raise LayoutError(f"{at}: badge must be an object with known keys")
+        entity = _entity(badge.get("entity"), f"{at}.entity")
+        if entity is None:
+            raise LayoutError(f"{at}.entity: required")
+        out.append({"entity": entity, "color": _color(badge.get("color"), f"{at}.color")})
+    return out
+
+
 def _links(data: Any) -> dict[str, dict[str, Any]]:
     if not isinstance(data, dict):
         raise LayoutError("links must be an object")
@@ -173,7 +193,8 @@ def _links(data: Any) -> dict[str, dict[str, Any]]:
 def _items(data: Any, groups: dict[str, Any], links: dict[str, Any]) -> dict[str, dict[str, Any]]:
     """Per-entry extras (badge entity, show-only-when entity, search words, icon colour); empty entries are dropped.
 
-    The colour is kept only when set, and only on panels and links: a group has its own colours.
+    The icon colour is kept only when set, and only on panels and links: a group has its own colours. The badge colour
+    is kept only with a badge entity; extra badges (a list of entity + colour) are for panels and links.
     """
     if not isinstance(data, dict):
         raise LayoutError("items must be an object")
@@ -204,7 +225,15 @@ def _items(data: Any, groups: dict[str, Any], links: dict[str, Any]) -> dict[str
             if key.startswith(GROUP_PREFIX):
                 raise LayoutError(f"{where}.color: a group's colours are set on the group")
             clean["color"] = color
-        if clean["badge"] or clean["show_when"] or clean["aliases"] or color:
+        badge_color = _color(item.get("badge_color"), f"{where}.badge_color")
+        if badge_color is not None and clean["badge"]:
+            clean["badge_color"] = badge_color
+        more = _more_badges(item.get("more_badges"), f"{where}.more_badges")
+        if more:
+            if key.startswith(GROUP_PREFIX):
+                raise LayoutError(f"{where}.more_badges: only panels and links take extra badges")
+            clean["more_badges"] = more
+        if clean["badge"] or clean["show_when"] or clean["aliases"] or color or more:
             out[key] = clean
     return out
 

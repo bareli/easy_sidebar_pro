@@ -78,7 +78,10 @@ the same layout to every user who has not made their own.
   - **Move to**: put the item into a group, back to the top level or into the pinned area, without dragging.
   - **Badge**: an entity whose number shows on the item, like Home Assistant's update count on Settings (for
     example `sensor.open_windows`); an entity that is on, open or active shows a dot. A folded group, and a
-    tabs group, show their items' badges added up.
+    tabs group, show their items' badges added up. Each badge can have its own **badge colour**, and a panel or a
+    link can have up to three more badges (**Add another badge**, each with its own entity and colour), for
+    example a red badge for overdue tasks and an orange one for tasks due soon. Active badges show side by side;
+    the narrow icon rail shows the first active one on the icon.
   - **Show only while this entity is on**: the item (or the whole group) appears only while the entity is on,
     open or above 0, for example an "Alarm" group only while `input_boolean.alarm` is on.
   - **Search words**: other names the search box finds the item by.

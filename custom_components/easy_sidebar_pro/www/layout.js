@@ -10,6 +10,8 @@
 //                   "l:<id>" (in order, a group or the grid), so moving, grouping, pinning and tabs treat it as one.
 // Extras (v0.5):    `items: { "<path>" | "l:<id>" | "g:<id>": { badge, show_when, aliases, color? } }` (entity ids, search words;
 //                    v0.6 icon colour, panels and links only, stored only when set).
+//                   v0.7: `badge_color` (colour of the badge entity's badge, only with one) and `more_badges: [{ entity, color }]`
+//                    (up to MAX_MORE_BADGES, panels and links only), drawn side by side after the first.
 
 export const GROUP_PREFIX = "g:";
 export const LINK_PREFIX = "l:";
@@ -18,7 +20,8 @@ export const MAX_URL = 2000;
 export const MAX_ALIASES = 100;
 // Same lists as const.py LINK_KEYS / ITEM_KEYS.
 export const LINK_KEYS = ["name", "icon", "url", "new_tab"];
-export const ITEM_KEYS = ["badge", "show_when", "aliases", "color"];
+export const ITEM_KEYS = ["badge", "show_when", "aliases", "color", "badge_color", "more_badges"];
+export const MAX_MORE_BADGES = 3;
 export const LAYOUT_VERSION = 1;
 export const MAX_NAME = 50;
 export const MAX_PINNED = 20;
@@ -195,6 +198,22 @@ export function cleanAliases(value) {
   return cpSlice(text, MAX_ALIASES).trim();
 }
 
+/** Extra badges as stored: those with a valid entity (colour or null), at most MAX_MORE_BADGES. */
+export function cleanMoreBadges(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((b) => validEntity(b?.entity))
+    .slice(0, MAX_MORE_BADGES)
+    .map((b) => ({ entity: b.entity, color: b.color != null && validColor(b.color) ? b.color : null }));
+}
+
+/** The badges of an entry in display order: [{ entity, color }]; its own entity first, then the extra ones. */
+export function badgeSpecs(item) {
+  const out = [];
+  if (validEntity(item?.badge)) out.push({ entity: item.badge, color: item.badge_color != null && validColor(item.badge_color) ? item.badge_color : null });
+  return out.concat(cleanMoreBadges(item?.more_badges));
+}
+
 /** An entry's extras with defaults, or null when it has none. A colour is kept only when set and not on a group key. */
 export function cleanItem(item, key = "") {
   const out = {
@@ -204,7 +223,11 @@ export function cleanItem(item, key = "") {
   };
   const color = item?.color ?? null;
   if (color !== null && validColor(color) && !key.startsWith(GROUP_PREFIX)) out.color = color;
-  return out.badge || out.show_when || out.aliases || out.color ? out : null;
+  const badgeColor = item?.badge_color ?? null;
+  if (out.badge && badgeColor !== null && validColor(badgeColor)) out.badge_color = badgeColor;
+  const more = key.startsWith(GROUP_PREFIX) ? [] : cleanMoreBadges(item?.more_badges);
+  if (more.length) out.more_badges = more;
+  return out.badge || out.show_when || out.aliases || out.color || more.length ? out : null;
 }
 
 /** A link as stored, or null when it cannot be saved (no name or no valid address). */
@@ -264,7 +287,8 @@ export function hiddenByCondition(layout, active) {
  * the condition hides the entry right now (`active(entityId)`). null when the entry has neither.
  */
 export function ruleOf(item, active) {
-  const badge = validEntity(item?.badge) ? item.badge : null;
+  const entities = badgeSpecs(item).map((b) => b.entity);
+  const badge = entities.length ? entities.join(", ") : null;
   const showWhen = validEntity(item?.show_when) ? item.show_when : null;
   if (!badge && !showWhen) return null;
   return { badge, showWhen, hiddenNow: !!showWhen && !active(showWhen) };
@@ -273,7 +297,10 @@ export function ruleOf(item, active) {
 /** Entity ids a layout's badges and conditions read (the sidebar re-renders when one of them changes). */
 export function watchedEntities(layout) {
   const out = new Set();
-  for (const item of Object.values(layout?.items ?? {})) for (const k of ["badge", "show_when"]) if (validEntity(item?.[k])) out.add(item[k]);
+  for (const item of Object.values(layout?.items ?? {})) {
+    for (const b of badgeSpecs(item)) out.add(b.entity);
+    if (validEntity(item?.show_when)) out.add(item.show_when);
+  }
   return [...out];
 }
 

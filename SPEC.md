@@ -235,12 +235,13 @@ edited in the in-sidebar editor, validated by `layout.py` and mirrored in `layou
   (focus + message). Links have no eye (not HA panels); they are deleted from their options.
 
 ### 9.2 Item options (`items`)
-- `items: { "<panel path>" | "l:<id>" | "g:<id>": { badge, show_when, aliases } }`; entity ids
+- `items: { "<panel path>" | "l:<id>" | "g:<id>": { badge, show_when, aliases, color?, badge_color?, more_badges? } }`; entity ids
   `[a-z0-9_]{1,64}.[a-z0-9_]{1,255}` or null; aliases at most 100 characters, spaces collapsed; empty entries dropped.
 - Badge: positive number -> count (`99+` cap); other active state -> dot; `off`, `closed`, `locked`, `unavailable`,
   `unknown`, `idle`, `standby`, `not_home`, `disarmed`, `docked`, `paused`, 0, negative -> nothing. Rows get HA's
   `.badge` spans (start for the rail, end for the expanded sidebar). A group's own badge wins; otherwise a folded or
   tabbed group shows its members' badges added up (dot when only dots).
+- v0.7 (issue #64): `badge_color` (named or `#rrggbb`; kept only with a `badge`; allowed on groups) tints that badge: fill = colour mixed 60% with black under white text (`--esp-badge-color`). `more_badges: [{entity, color}]` (max 3, panels and links only, refused on groups) add badges after the first; the expanded row shows every active one side by side, the rail the first active one on the icon. A folded group adds up all its members' badges.
 - `show_when`: the entry (a whole group: all its members) is left out while the entity is not active.
 - The sidebar re-renders when a watched entity's state object changes (`shouldUpdate`).
 - Editor: ⋮ on each row (More on a group) opens one options block at a time: Move to (top level, a group, pinned),

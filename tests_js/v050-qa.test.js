@@ -127,7 +127,7 @@ test("#45 Done and Set as default refuse while an option field is in error", () 
 test("#45 every ⋮ text field records its error and shows it again after a re-render", () => {
   const panel = SRC.slice(SRC.indexOf("  optionsPanel(key) {"), SRC.indexOf("  /** A link's name or icon changed"));
   // link name, address, icon, badge + show-when (one helper), search words
-  assert.equal(panel.match(/errors,\n\s+row: key,/g)?.length, 5);
+  assert.equal(panel.match(/errors,\n\s+row: key,/g)?.length, 6); // + the extra badges' entity field (v0.7)
   const field = SRC.slice(SRC.indexOf("function optField("), SRC.indexOf("class EspEditor"));
   assert.match(field, /if \(message\) errors\?\.set\(focusKey, \{ row, value: input\.value, message \}\);\n\s+else errors\?\.delete\(focusKey\);/);
   assert.match(field, /"aria-invalid": pending \? "true" : null,/);
