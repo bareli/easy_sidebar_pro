@@ -103,14 +103,16 @@ the same layout to every user who has not made their own.
 
 ## Install
 
-1. HACS → three dots → Custom repositories → `https://github.com/bareli/easy_sidebar_pro`, type
-   **Integration**.
-2. Download **Easy Sidebar Pro**, restart Home Assistant.
+1. In HACS, search for **Easy Sidebar Pro** and download it.
+2. Restart Home Assistant.
 3. Settings → Devices & services → Add integration → **Easy Sidebar Pro**.
 4. Refresh the browser (and close and reopen the companion app). The pencil appears next to the
    sidebar title.
 
 No `configuration.yaml` changes are needed.
+
+If HACS does not list it yet: HACS → three dots → Custom repositories →
+`https://github.com/bareli/easy_sidebar_pro`, type **Integration**, then continue from step 1.
 
 ## Theme variables
 
