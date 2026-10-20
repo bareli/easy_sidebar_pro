@@ -90,6 +90,11 @@ const STRINGS = {
     iconInvalid: "Use the form mdi:name",
     color: "Colour",
     iconColor: "Icon colour",
+    badgeColor: "Badge colour",
+    badgeExtra: "Badge {n} entity",
+    badgeAdd: "Add another badge",
+    badgeRemove: "Remove badge {n}",
+    badgeRemoveShort: "Remove badge",
     noColor: "No colour",
     customColor: "Custom colour, for example #4caf50",
     pickColor: "Choose a colour",
@@ -227,6 +232,11 @@ const STRINGS = {
     iconInvalid: "כתבו בצורה mdi:name",
     color: "צבע",
     iconColor: "צבע הסמל",
+    badgeColor: "צבע המספר על הפריט",
+    badgeExtra: "מספר נוסף {n} (ישות)",
+    badgeAdd: "הוספת מספר נוסף",
+    badgeRemove: "הסרת מספר נוסף {n}",
+    badgeRemoveShort: "הסרת המספר",
     noColor: "ללא צבע",
     customColor: "צבע מותאם, למשל #4caf50",
     pickColor: "בחירת צבע",
@@ -436,24 +446,39 @@ function rowPath(item) {
 }
 
 /**
+ * Store an entry's edited extras, or drop the entry when nothing is left. A draft extra badge (no entity yet) is
+ * kept while editing; saving cleans it away.
+ */
+function keepItem(editor, key, next) {
+  if (next.more_badges && !next.more_badges.length) delete next.more_badges;
+  if (L.cleanItem(next, key) || next.more_badges) editor.meta.items[key] = next;
+  else delete editor.meta.items[key];
+}
+
+/**
  * A badge on one of HA's rows, drawn like HA's own (Settings' update count): one span beside the icon for
  * the icon-only rail, one at the end for the expanded sidebar (HA's CSS shows the right one). A dot
  * (active, no number) carries hidden text, so screen readers hear it with the row's name.
  */
-function setBadge(item, badge, lang) {
+function setBadge(item, badges, lang) {
   const spans = item.querySelectorAll(":scope > .esp-badge");
-  const sig = badge ? `${badge.count ?? "dot"}|${lang}` : "";
+  const sig = badges?.length ? `${badges.map((b) => `${b.badge.count ?? "dot"}:${b.color ?? ""}`).join(",")}|${lang}` : "";
   if ((spans[0]?.dataset.sig ?? "") === sig) return;
   for (const s of spans) s.remove();
-  if (!badge) return;
-  const text = L.badgeText(badge);
-  const cls = `badge esp-badge${badge.count ? "" : " esp-dot"}`;
+  if (!sig) return;
   const icon = item.querySelector(':scope > [slot="start"]');
-  const start = h("span", { class: cls, slot: "start", "aria-hidden": "true", "data-sig": sig }, text);
-  const end = h("span", { class: cls, slot: "end", "data-sig": sig }, badge.count ? text : h("span", { class: "esp-sr" }, t(lang, "badgeActive")));
-  if (icon) icon.after(start);
-  else item.prepend(start);
-  item.append(end);
+  // The icon-only rail has room for one badge on the icon: the first active one. The expanded row shows them side by side.
+  badges.forEach(({ badge, color }, i) => {
+    const text = L.badgeText(badge);
+    const cls = `badge esp-badge${badge.count ? "" : " esp-dot"}`;
+    const style = color ? `--esp-badge-color: ${L.colorCss(color)}` : null;
+    if (i === 0) {
+      const start = h("span", { class: cls, slot: "start", style, "aria-hidden": "true", "data-sig": sig }, text);
+      if (icon) icon.after(start);
+      else item.prepend(start);
+    }
+    item.append(h("span", { class: cls, slot: "end", style, "data-sig": sig }, badge.count ? text : h("span", { class: "esp-sr" }, t(lang, "badgeActive"))));
+  });
 }
 
 const panelTitle = (hass, panel) => hass.localize?.(`panel.${panel.title}`) || panel.title || panel.url_path;
@@ -514,7 +539,7 @@ const GROUP_CSS = `
    colour mixed 60% with black: white text 5.4:1 and the dot 5.4:1 (light) / 3.1:1 (dark sidebar) with HA's orange (BUG-016). */
 .row { position: relative; }
 .badge { flex: none; display: flex; align-items: center; justify-content: center; box-sizing: border-box; min-width: 20px; height: 20px; padding: 0 6px;
-  border-radius: 10px; background-color: var(--accent-color); background-color: color-mix(in srgb, var(--accent-color) 60%, black); color: #fff;
+  border-radius: 10px; background-color: var(--esp-badge-color, var(--accent-color)); background-color: color-mix(in srgb, var(--esp-badge-color, var(--accent-color)) 60%, black); color: #fff;
   font-size: var(--ha-font-size-s, 12px); font-weight: normal; font-variant-numeric: tabular-nums; line-height: 1; }
 .badge[data-dot] { min-width: 0; width: 10px; height: 10px; padding: 0; border-radius: 50%; }
 .badge[hidden] { display: none; }
@@ -587,6 +612,7 @@ class EspGroup extends HTMLElement {
     setFlag(this._badge, "hidden", !badge);
     setFlag(this._badge, "data-dot", !!badge && !badge.count);
     setText(this._badge, badgeText);
+    setVar(this._badge, "--esp-badge-color", row.badgeColor ? L.colorCss(row.badgeColor) : null);
     const said = badge ? `, ${badge.count ? badgeText : t(lang, "badgeActive")}` : "";
     // A tabbed group opens a page (a link, current while one of its tabs is open); others fold.
     setAttr(this._row, "role", tabbed ? "link" : "button");
@@ -693,6 +719,7 @@ button { font: inherit; color: inherit; }
 .group[data-color] { border-inline-start: 4px solid var(--esp-own-line); }
 .group > .row.head .icon { color: var(--esp-own-icon-color, var(--sidebar-icon-color, var(--secondary-text-color))); }
 .row[data-item-color] > .icon { color: var(--esp-item-color); }
+.more-badge { display: grid; gap: 4px; border-inline-start: 2px solid var(--divider-color); padding-inline-start: 8px; }
 .sub { color: var(--secondary-text-color); font-size: var(--ha-font-size-s, 12px); font-weight: var(--ha-font-weight-medium, 500); margin-top: 4px; }
 .swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(32px, 1fr)); gap: 2px; }
 .swatch { width: 32px; height: 32px; display: grid; place-items: center; border: none; background: none; border-radius: 50%; cursor: pointer; padding: 0; }
@@ -1826,6 +1853,43 @@ class EspEditor extends HTMLElement {
       });
     parts.push(
       entity("badge", "badge", "badgeHelp"),
+      this.colorPicker({ id: ikey, field: "badge", labelKey: "badgeColor", value: item.badge_color ?? null, set: (color) => this.actions.setBadgeColor(ikey, color) }),
+    );
+    // Extra badges beside the first (panels and links): each its own entity and colour.
+    if (path) {
+      const more = item.more_badges ?? [];
+      more.forEach((badge, i) => {
+        const field = `more${i}`;
+        parts.push(
+          h(
+            "div",
+            { class: "more-badge" },
+            optField({
+              label: t(lang, "badgeExtra", { n: i + 2 }),
+              value: badge.entity,
+              focusKey: fk(field),
+              errors,
+              row: key,
+              dir: "auto",
+              suggest: (text) => L.matchEntities(this.entityChoices, text),
+              placeholder: "sensor.open_windows",
+              warn: (v) => (L.unknownEntity(v, this.hass?.states) ? t(lang, "entityMissing") : ""),
+              commit: (input) => this.actions.setMoreBadge(ikey, i, "entity", input.value),
+            }),
+            this.colorPicker({ id: ikey, field, labelKey: "badgeColor", value: badge.color ?? null, set: (color) => this.actions.setMoreBadge(ikey, i, "color", color) }),
+            h(
+              "button",
+              { class: "btn remove", type: "button", "aria-label": t(lang, "badgeRemove", { n: i + 2 }), "data-focus-key": fk(`rm${field}`), onclick: () => this.actions.removeMoreBadge(ikey, i) },
+              svg(ICONS.delete),
+              t(lang, "badgeRemoveShort"),
+            ),
+          ),
+        );
+      });
+      if (more.length < L.MAX_MORE_BADGES)
+        parts.push(h("button", { class: "btn", type: "button", "data-focus-key": fk("addbadge"), onclick: () => this.actions.addMoreBadge(ikey) }, t(lang, "badgeAdd")));
+    }
+    parts.push(
       entity("show_when", "showWhen", "showWhenHelp"),
       optField({
         label: t(lang, "aliases"),
@@ -2341,7 +2405,8 @@ ha-list-item-button:is([data-esp-group], [data-esp-color]):not(.selected) ha-svg
 :host(:not([expanded])) .esp-btn { display: none; }
 /* Badges (v0.5): HA styles .badge and places the rail one after an SVG icon; dashboards and links use ha-icon.
    Our badges only (HA's own Settings badge keeps HA's look): a darker fill, white text 4.5:1 and the dot 3:1 (BUG-016). */
-ha-list-item-button > .badge.esp-badge { background-color: var(--accent-color); background-color: color-mix(in srgb, var(--accent-color) 60%, black); color: #fff; }
+ha-list-item-button > .badge.esp-badge { background-color: var(--esp-badge-color, var(--accent-color)); background-color: color-mix(in srgb, var(--esp-badge-color, var(--accent-color)) 60%, black); color: #fff; }
+ha-list-item-button > .badge.esp-badge[slot="end"] ~ .badge.esp-badge[slot="end"] { margin-inline-start: 4px; }
 ha-icon + .badge.esp-badge { position: absolute; top: var(--ha-space-1, 4px); left: 26px; border-radius: var(--ha-border-radius-md, 8px); font-size: 0.65em;
   line-height: var(--ha-line-height-expanded, 1.5); padding: 0 var(--ha-space-1, 4px); }
 .badge.esp-dot { min-width: 0; width: 10px; height: 10px; padding: 0; border-radius: 50%; }
@@ -2605,12 +2670,17 @@ class Controller {
     } else rows = L.arrange(layout, visible, this.collapsed, selected);
     // Badges: an entry's own entity; a folded or tabbed group without its own badge adds up its members'.
     const items = layout?.items ?? {};
-    const badgeFor = (key) => (items[key]?.badge ? L.badgeOf(states[items[key].badge]) : null);
-    this.badges = new Map([...visible].map((p) => [p, badgeFor(p)]).filter(([, b]) => b));
+    // A row shows its active badges (its entity, then the extra ones; v0.7), each with its own colour.
+    const badgesFor = (key) =>
+      L.badgeSpecs(items[key])
+        .map(({ entity, color }) => ({ badge: L.badgeOf(states[entity]), color }))
+        .filter((b) => b.badge);
+    this.badges = new Map([...visible].map((p) => [p, badgesFor(p)]).filter(([, b]) => b.length));
     for (const r of rows)
       if (r.type === "group") {
-        const own = items[L.groupKey(r.id)]?.badge;
-        r.badge = own ? badgeFor(L.groupKey(r.id)) : r.collapsed || r.tabbed ? L.rollup(r.paths.map((p) => this.badges.get(p))) : null;
+        const own = items[L.groupKey(r.id)];
+        r.badge = own?.badge ? L.badgeOf(states[own.badge]) : r.collapsed || r.tabbed ? L.rollup(r.paths.flatMap((p) => (this.badges.get(p) ?? []).map((b) => b.badge))) : null;
+        r.badgeColor = own?.badge ? L.badgeSpecs(own)[0].color : null;
       }
     this.rows = rows;
     this.rowGroups = new Map(rows.filter((r) => r.type === "panel").map((r) => [r.path, r.group]));
@@ -3343,11 +3413,51 @@ class Controller {
           clean = text.toLowerCase() || null;
           if (clean !== null && !L.validEntity(clean)) return t(lang(), "entityInvalid");
         }
-        const next = { ...e.item(ikey), [field]: clean };
-        if (L.cleanItem(next)) e.meta.items[ikey] = next;
-        else delete e.meta.items[ikey];
+        keepItem(e, ikey, { ...e.item(ikey), [field]: clean });
         e.patchRule(ikey);
         return "";
+      },
+      /** The colour of an entry's own badge (null = the theme's). */
+      setBadgeColor: (ikey, color) => {
+        if (!L.validColor(color)) return;
+        const e = ed();
+        const next = { ...e.item(ikey), badge_color: color };
+        if (color === null) delete next.badge_color;
+        keepItem(e, ikey, next);
+        e.syncPicker("badge", ikey, color);
+      },
+      /** One extra badge: its entity (returns an error text or "") or its colour. */
+      setMoreBadge: (ikey, i, field, value) => {
+        const e = ed();
+        const more = (e.item(ikey).more_badges ?? []).map((b) => ({ ...b }));
+        if (!more[i]) return "";
+        if (field === "entity") {
+          const id = String(value ?? "").trim().toLowerCase();
+          if (id && !L.validEntity(id)) return t(lang(), "entityInvalid");
+          more[i].entity = id;
+        } else {
+          if (!L.validColor(value)) return "";
+          more[i].color = value;
+        }
+        keepItem(e, ikey, { ...e.item(ikey), more_badges: more });
+        if (field === "color") e.syncPicker(`more${i}`, ikey, value);
+        e.patchRule(ikey);
+        return "";
+      },
+      addMoreBadge: (ikey) => {
+        const e = ed();
+        const more = [...(e.item(ikey).more_badges ?? [])];
+        if (more.length >= L.MAX_MORE_BADGES) return;
+        more.push({ entity: "", color: null });
+        keepItem(e, ikey, { ...e.item(ikey), more_badges: more });
+        e.set({}, `opt:more${more.length - 1}:${L.panelKey(ikey)}`);
+      },
+      removeMoreBadge: (ikey, i) => {
+        const e = ed();
+        const more = (e.item(ikey).more_badges ?? []).filter((_, j) => j !== i);
+        keepItem(e, ikey, { ...e.item(ikey), more_badges: more });
+        e.patchRule(ikey);
+        e.set({}, `opt:addbadge:${L.panelKey(ikey)}`);
       },
       /** A row's own icon colour (null = none). */
       setItemColor: (ikey, color) => {
@@ -3355,8 +3465,7 @@ class Controller {
         const e = ed();
         const next = { ...e.item(ikey), color };
         if (color === null) delete next.color;
-        if (L.cleanItem(next, ikey)) e.meta.items[ikey] = next;
-        else delete e.meta.items[ikey];
+        keepItem(e, ikey, next);
         e.patchItemColor(ikey);
       },
       rename: (id, input) => {
