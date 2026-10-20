@@ -259,3 +259,47 @@ edited in the in-sidebar editor, validated by `layout.py` and mirrored in `layou
   resolver gets `--safe-area-inset-top` (wide) or `--safe-area-inset-bottom` (narrow) plus 48 px, computed from
   `--esp-inset-*` set on the drawer (a property cannot refer to itself). Narrow (`ha-sidebar[narrow]`): a bottom bar,
   z-index 4 (below the modal drawer's scrim); wide: top, z-index 5 (above HA's header, 4).
+
+## 10. v0.8: action rows, gestures, state rules, labels, export / import
+
+Inspired by the Lovelace card `deconstructionalism/homeassistant-dashboard-sidebar` (tap / hold / double tap
+actions, state-driven look). Owner decisions 2026-10-20: all four of its ideas that fit, plus panel labels and
+export / import; action rows for any user.
+
+### 10.1 Action rows
+- `actions: { id: { name, icon, tap } }` (id `[a-z0-9]{1,16}`, at most 50, only written when there is one), placed like a
+  link with the path `a:<id>` (order, group, grid). Every action row must be placed. `name` 1-50 characters, `icon` as a
+  link's. The row is HA's `_renderPanel` for the stand-in path `esp-action-<id>`; its href is removed and the click is
+  swallowed. Not allowed in a tabbed group (server: `an action row cannot be a tab`; editor: refuses the move; a save
+  hoists one out after its group).
+- Action object `{ type, entity?, service?, data?, path? }`: `toggle` (`homeassistant.toggle`, entity),
+  `more-info` (`hass-more-info` event, entity), `call-service` (`domain.service` `[a-z0-9_]{1,64}\.[a-z0-9_]{1,64}`, optional
+  entity sent as `entity_id`, optional `data` object of at most 1000 characters as JSON), `navigate` (a page of HA, for
+  hold / double tap only). Fields that do not belong to the type are dropped. A tap is one of the first three.
+- Runs as the signed-in user through `hass.callService`; permission errors come back from HA and show as `hass-notification`.
+
+### 10.2 Gestures (`items[key].hold`, `.double_tap`)
+- Panels, links and action rows (not groups): an action object (or absent). Pointer: hold fires after 500 ms without
+  moving more than 10 px and swallows the click that ends the press; the browser's context menu is blocked on such rows.
+  A double tap is a second click within 250 ms; only a row with a double tap delays its single tap. Keyboard: Shift+Enter
+  (or the menu key, Shift+F10) = hold, Alt+Enter = double tap. The row's `aria-description` names both.
+  Modified clicks (Ctrl, Shift...) are left to the browser, except on an action row. Listeners sit on the sidebar's
+  shadow root in the capture phase; none are active while editing.
+
+### 10.3 State rules (`items[key].state_rules`)
+- Up to 3 `{ entity, when: "active" | "inactive", icon?, color? }` on panels, links, action rows (not groups); each has an
+  icon and/or a colour. "Active" is the badge meaning (`entityActive`). The first matching rule's icon replaces the row's
+  icon and its colour wins over `color` (and the group's icon colour). Watched entities include the rules'.
+
+### 10.4 Labels (`items[key].label`)
+- Home Assistant panels only (1-50 characters, empty = none). Laid over the panel object's `title` in the sidebar,
+  pinned rows, tab titles and the editor; search words: label, then HA's names, then the path.
+
+### 10.5 Export / import
+- Export = `toLayout` of the editor's tree, settings and extras as JSON. Import (at most 256 KB): `checkImport`
+  (object, version 1, list/object shapes), then `buildTree` + `metaOf` + `cleanSettings` into the editor as unsaved
+  changes; unknown panels stay as missing entries. The server validates again on save.
+
+### 10.6 Not done
+- Sub-path highlighting for links (`match_prefix`): already how internal links work (`linkAt`: the path or a page
+  under it, longest match), so it was not added as an option.

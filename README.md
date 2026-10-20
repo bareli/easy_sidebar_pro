@@ -74,6 +74,24 @@ the same layout to every user who has not made their own.
   (`192.168.1.251:5000`, `nas.local`, `router.lan`, `localhost`, any address with a port) gets `http://`, other
   web names (`example.com`) get `https://`, and a single word (`energy`) is a Home Assistant page (`/energy`); the
   field shows the result.
+- **Actions**: **Add action** in the editor adds an item that does something when you tap it instead of opening a
+  page: toggle an entity, show an entity's details (the more-info dialog), or call a service with optional JSON
+  data (for example `scene.turn_on` on `scene.movie_night`, or `script.turn_on`). Give it a name and an icon; it can
+  be grouped and pinned, and have badges, an icon colour and a show-only-when rule, but it cannot be a tab. It runs
+  as the signed-in user, so Home Assistant's own permissions apply; a failure shows as Home Assistant's message.
+- **Hold and double tap**: any item (a panel, a link or an action) can run an action on a hold (press and keep for
+  half a second, or Shift + Enter with the keyboard) and on a double tap (or Alt + Enter): toggle, show details,
+  call a service or open a page. A row with a double tap waits a quarter of a second after a single tap to see
+  whether a second one follows. Screen readers hear both gestures in the row's description. They do not run while
+  you edit.
+- **Icon and colour by state** (⋮, up to three rules per item): while an entity is active (on, open, above 0) or
+  inactive, the item's icon and/or icon colour change; the first matching rule wins.
+- **Rename panels**: a panel's ⋮ options have **Name in the sidebar**. The sidebar, the editor and the tab bar show it;
+  the search finds both the new and Home Assistant's own name. Empty means Home Assistant's name.
+- **Export / import** (editor footer): **Export layout** saves the layout as a JSON file (what the editor holds now,
+  also unsaved changes). **Import layout** loads such a file into the editor as unsaved changes; press **Done** to
+  save it. Files over 256 KB are refused. Panels this Home Assistant does not have keep their place, as
+  with a stopped add-on.
 - **More options per item** (the ⋮ button on each row in the editor, and **More** on a group):
   - **Move to**: put the item into a group, back to the top level or into the pinned area, without dragging.
   - **Badge**: an entity whose number shows on the item, like Home Assistant's update count on Settings (for
