@@ -165,3 +165,21 @@ def test_action_rows_cannot_be_tabs():
         validate_layout(layout)
     layout["groups"]["home"]["tabbed"] = False
     assert validate_layout(layout)["groups"]["home"]["panels"] == ["history", "a:lamp"]
+
+
+async def test_ws_save_carries_actions_and_refuses_bad_ones(hass, entry, hass_ws_client):
+    from custom_components.easy_sidebar_pro.const import DOMAIN
+
+    layout = {**BASE, "items": {"a:lamp": {"hold": {"type": "more-info", "entity": "light.lamp"}}, "map": {"label": "Karta"}}}
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id({"type": f"{DOMAIN}/save", "layout": layout})
+    assert (await client.receive_json())["success"]
+    await client.send_json_auto_id({"type": f"{DOMAIN}/subscribe"})
+    assert (await client.receive_json())["success"]
+    event = (await client.receive_json())["event"]
+    assert event["layout"] == validate_layout(layout)
+    assert event["layout"]["actions"]["lamp"]["tap"]["type"] == "toggle"
+    bad = {**layout, "actions": {"lamp": {"name": "Lamp", "tap": {"type": "call-service", "service": "nodot"}}}}
+    await client.send_json_auto_id({"type": f"{DOMAIN}/save", "layout": bad})
+    msg = await client.receive_json()
+    assert not msg["success"] and msg["error"]["code"] == "invalid_format" and "service" in msg["error"]["message"]

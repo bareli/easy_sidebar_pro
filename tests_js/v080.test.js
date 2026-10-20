@@ -208,3 +208,9 @@ test("every new string exists in English and Hebrew", () => {
     assert.ok(he.includes(`    ${key}: "`), `he ${key}`);
   }
 });
+
+test("a state rule's icon replaces an SVG-path icon with an ha-icon (built-in panels ignore panel.icon)", () => {
+  assert.match(SRC, /function setStateIcon\(item, icon\)/);
+  assert.match(SRC, /setStateIcon\(item, this\.looks\?\.get\(path\)\?\.icon \?\? null\);/);
+  assert.match(SRC, /starts\[starts\.length - 1\]/);
+});

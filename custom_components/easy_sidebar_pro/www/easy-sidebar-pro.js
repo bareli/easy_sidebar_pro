@@ -603,7 +603,8 @@ function setBadge(item, badges, lang) {
   if ((spans[0]?.dataset.sig ?? "") === sig) return;
   for (const s of spans) s.remove();
   if (!sig) return;
-  const icon = item.querySelector(':scope > [slot="start"]');
+  const starts = item.querySelectorAll(':scope > [slot="start"]:not(.esp-badge)');
+  const icon = starts[starts.length - 1];
   // The icon-only rail has room for one badge on the icon: the first active one. The expanded row shows them side by side.
   badges.forEach(({ badge, color }, i) => {
     const text = L.badgeText(badge);
@@ -616,6 +617,29 @@ function setBadge(item, badges, lang) {
     }
     item.append(h("span", { class: cls, slot: "end", style, "data-sig": sig }, badge.count ? text : h("span", { class: "esp-sr" }, t(lang, "badgeActive"))));
   });
+}
+
+/**
+ * A state rule's icon on a row whose icon HA draws from an SVG path (built-in panels ignore `panel.icon`): an
+ * `ha-icon` takes its place, the SVG stays in the row, hidden. Rows drawn with `ha-icon` already follow `panel.icon`.
+ */
+function setStateIcon(item, icon) {
+  const own = item.querySelector(":scope > ha-icon.esp-state-icon");
+  const base = item.querySelector(':scope > ha-svg-icon[slot="start"]');
+  if (!icon || !base) {
+    own?.remove();
+    if (base && base.style.display) base.style.removeProperty("display");
+    return;
+  }
+  if (!own) {
+    const el = document.createElement("ha-icon");
+    el.className = "esp-state-icon";
+    el.slot = "start";
+    base.after(el);
+  }
+  const shown = item.querySelector(":scope > ha-icon.esp-state-icon");
+  if (shown.icon !== icon) shown.icon = icon;
+  if (base.style.display !== "none") base.style.display = "none";
 }
 
 const panelTitle = (hass, panel) => hass.localize?.(`panel.${panel.title}`) || panel.title || panel.url_path;
@@ -3407,6 +3431,7 @@ class Controller {
         const path = rowPath(item);
         if (L.isLink(path)) this.linkItem(item, path);
         if (L.isAction(path) && item.href) item.href = undefined;
+        setStateIcon(item, this.looks?.get(path)?.icon ?? null);
         setBadge(item, this.badges?.get(path) ?? null, this.lang);
         setAttr(item, "aria-description", this.gestureHint(path));
       }
