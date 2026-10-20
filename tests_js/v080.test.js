@@ -214,3 +214,9 @@ test("a state rule's icon replaces an SVG-path icon with an ha-icon (built-in pa
   assert.match(SRC, /setStateIcon\(item, this\.looks\?\.get\(path\)\?\.icon \?\? null\);/);
   assert.match(SRC, /starts\[starts\.length - 1\]/);
 });
+
+test("the 'finish this option first' message clears once nothing is unfinished", () => {
+  const SRC = fs.readFileSync(new URL("../custom_components/easy_sidebar_pro/www/easy-sidebar-pro.js", import.meta.url), "utf8");
+  assert.match(SRC, /clearIncomplete\(\) \{\s+if \(this\.error !== t\(this\.lang, "incomplete"\) \|\| this\.firstIncomplete\(\)\) return;/);
+  assert.match(SRC, /for \(const type of \["change", "click"\]\) root\.addEventListener\(type, \(\) => this\.clearIncomplete\(\)\);/);
+});

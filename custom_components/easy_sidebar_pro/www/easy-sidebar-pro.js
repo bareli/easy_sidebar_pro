@@ -1128,6 +1128,8 @@ class EspEditor extends HTMLElement {
     this._content = h("div");
     this._live = h("div", { class: "sr live", "aria-live": "polite" });
     root.append(style, this._content, this._live);
+    // After the field's own handler ran: change (inputs, selects) and click (remove, add).
+    for (const type of ["change", "click"]) root.addEventListener(type, () => this.clearIncomplete());
     this._drag = null;
     this._onMove = (e) => this._dragMove(e);
     this._onUp = (e) => this._dragEnd(e, false);
@@ -2309,11 +2311,8 @@ class EspEditor extends HTMLElement {
     this._q(`[data-opts="${CSS.escape(L.panelKey(path))}"]`)?.setAttribute("aria-label", t(this.lang, "options", { name: text }));
   }
 
-  /**
-   * An action row, hold, double tap or state rule that cannot be saved yet: open that row's options at the first field
-   * it still needs and say so. Returns whether one did (Done refuses then).
-   */
-  focusIncomplete() {
+  /** The first action row, hold, double tap or state rule that cannot be saved yet: its row key and first missing field. */
+  firstIncomplete() {
     const missing = (a) => (!a ? "type" : a.type === "toggle" || a.type === "more-info" ? "entity" : a.type === "call-service" ? (a.service ? "data" : "service") : "path");
     for (const path of L.flatten(this.tree)) {
       const key = L.panelKey(path);
@@ -2325,11 +2324,27 @@ class EspEditor extends HTMLElement {
       (item.state_rules ?? []).forEach((rule, i) => {
         if (!focusKey && !L.cleanStateRules([rule]).length) focusKey = `opt:rule${i}-${L.validEntity(rule.entity) ? "icon" : "entity"}:${key}`;
       });
-      if (!focusKey) continue;
-      this.set({ optionsOpen: key, error: t(this.lang, "incomplete") }, focusKey);
-      return true;
+      if (focusKey) return { key, focusKey };
     }
-    return false;
+    return null;
+  }
+
+  /**
+   * An action row, hold, double tap or state rule that cannot be saved yet: open that row's options at the first field
+   * it still needs and say so. Returns whether one did (Done refuses then).
+   */
+  focusIncomplete() {
+    const first = this.firstIncomplete();
+    if (!first) return false;
+    this.set({ optionsOpen: first.key, error: t(this.lang, "incomplete") }, first.focusKey);
+    return true;
+  }
+
+  /** The "finish this option first" message goes away as soon as nothing is left unfinished. */
+  clearIncomplete() {
+    if (this.error !== t(this.lang, "incomplete") || this.firstIncomplete()) return;
+    this.error = "";
+    this._q('.error[role="alert"]')?.remove();
   }
 
   /** Download the layout as the editor holds it (not yet saved) as a JSON file. */
