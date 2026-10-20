@@ -17,8 +17,10 @@ MAX_ENTRIES = 500
 MAX_NAME = 50
 GROUP_PREFIX = "g:"
 LINK_PREFIX = "l:"
+ACTION_PREFIX = "a:"
 MAX_PINNED = 20
 MAX_LINKS = 50
+MAX_ACTIONS = 50
 MAX_URL = 2000
 MAX_ALIASES = 100
 
@@ -34,10 +36,19 @@ DIVIDER_STYLES = ("line", "none")
 GROUP_KEYS = ("name", "icon", "color", "icon_color", "start_open", "tabbed", "panels")
 # Keys of a stored link and of an entry's extras (layout.js LINK_KEYS / ITEM_KEYS).
 LINK_KEYS = ("name", "icon", "url", "new_tab")
-ITEM_KEYS = ("badge", "show_when", "aliases", "color", "badge_color", "more_badges")
+ITEM_KEYS = ("badge", "show_when", "aliases", "color", "badge_color", "more_badges", "hold", "double_tap", "state_rules", "label")
 # Extra badges beside an entry's own (layout.js MAX_MORE_BADGES); keys of one of them.
 MAX_MORE_BADGES = 3
 MORE_BADGE_KEYS = ("entity", "color")
+# v0.8: action rows (`actions: {id: {name, icon, tap}}`, path "a:<id>"), gestures, state rules (layout.js has the same lists).
+ACTION_KEYS = ("name", "icon", "tap")
+ACTION_FIELDS = ("type", "entity", "service", "data", "path")
+ACTION_TYPES = ("toggle", "more-info", "call-service", "navigate")
+TAP_TYPES = ("toggle", "more-info", "call-service")
+MAX_ACTION_DATA = 1000
+STATE_RULE_KEYS = ("entity", "when", "icon", "color")
+STATE_RULE_WHEN = ("active", "inactive")
+MAX_STATE_RULES = 3
 DEFAULT_SETTINGS = {
     "start_collapsed": False,
     "accordion": False,

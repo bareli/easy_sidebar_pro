@@ -1,11 +1,16 @@
 """Layout validation (pure, no Home Assistant imports)."""
 from __future__ import annotations
 
+import json
 import re
 import unicodedata
 from typing import Any
 
 from .const import (
+    ACTION_FIELDS,
+    ACTION_KEYS,
+    ACTION_PREFIX,
+    ACTION_TYPES,
     DEFAULT_SETTINGS,
     DIVIDER_STYLES,
     GROUP_PREFIX,
@@ -14,6 +19,8 @@ from .const import (
     LAYOUT_VERSION,
     LINK_KEYS,
     LINK_PREFIX,
+    MAX_ACTION_DATA,
+    MAX_ACTIONS,
     MAX_ALIASES,
     MAX_ENTRIES,
     MAX_MORE_BADGES,
@@ -22,13 +29,18 @@ from .const import (
     MAX_LINKS,
     MAX_NAME,
     MAX_PINNED,
+    MAX_STATE_RULES,
     MAX_URL,
     NAMED_COLORS,
+    STATE_RULE_KEYS,
+    STATE_RULE_WHEN,
+    TAP_TYPES,
 )
 
 GROUP_ID = re.compile(r"[a-z0-9]{1,16}")
 PANEL = re.compile(r"[A-Za-z0-9_-]{1,100}")
 ENTITY_ID = re.compile(r"[a-z0-9_]{1,64}\.[a-z0-9_]{1,255}")
+SERVICE = re.compile(r"[a-z0-9_]{1,64}\.[a-z0-9_]{1,64}")
 # A link opens a page of this Home Assistant ("/config/automation") or a web address (http / https only).
 URL_INTERNAL = re.compile(r"/(?![/\\])\S*")
 # The scheme is matched in ASCII only: re.IGNORECASE folds "ſ" (U+017F) to "s" and "K" (U+212A) to "k" (SEC-003).
@@ -169,6 +181,100 @@ def _more_badges(value: Any, where: str) -> list[dict[str, Any]]:
     return out
 
 
+def _label(value: Any, where: str) -> str | None:
+    """A panel's own name in the sidebar: empty means none."""
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise LayoutError(f"{where}: label must be text")
+    return _name(value, where) if value.strip() else None
+
+
+def _action(value: Any, where: str, *, tap: bool = False) -> dict[str, Any] | None:
+    """What a tap, hold or double tap does; None for nothing. An action row's tap cannot navigate."""
+    if value is None:
+        return None
+    if not isinstance(value, dict) or set(value) - set(ACTION_FIELDS):
+        raise LayoutError(f"{where}: action must be an object with known keys")
+    kind = value.get("type")
+    if kind not in (TAP_TYPES if tap else ACTION_TYPES):
+        raise LayoutError(f"{where}.type: invalid action type")
+    out: dict[str, Any] = {"type": kind}
+    entity = _entity(value.get("entity"), f"{where}.entity")
+    if kind in ("toggle", "more-info"):
+        if entity is None:
+            raise LayoutError(f"{where}.entity: required")
+        out["entity"] = entity
+    elif kind == "call-service":
+        service = value.get("service")
+        if not isinstance(service, str) or not SERVICE.fullmatch(service):
+            raise LayoutError(f"{where}.service: use domain.service")
+        out["service"] = service
+        if entity is not None:
+            out["entity"] = entity
+        data = value.get("data")
+        if data is not None:
+            if not isinstance(data, dict):
+                raise LayoutError(f"{where}.data: must be an object")
+            try:
+                size = len(json.dumps(data, separators=(",", ":"), ensure_ascii=False))
+            except (TypeError, ValueError) as err:
+                raise LayoutError(f"{where}.data: must be JSON") from err
+            if size > MAX_ACTION_DATA:
+                raise LayoutError(f"{where}.data: at most {MAX_ACTION_DATA} characters")
+            if data:
+                out["data"] = data
+    else:
+        path = value.get("path")
+        if not isinstance(path, str) or not isinstance(_url(path, f"{where}.path"), str) or not URL_INTERNAL.fullmatch(path):
+            raise LayoutError(f"{where}.path: must be a page of Home Assistant")
+        out["path"] = path
+    return out
+
+
+def _state_rules(value: Any, where: str) -> list[dict[str, Any]]:
+    """Up to MAX_STATE_RULES rules: while the entity is active / inactive, the icon and / or icon colour change."""
+    if value is None:
+        return []
+    if not isinstance(value, list) or len(value) > MAX_STATE_RULES:
+        raise LayoutError(f"{where}: at most {MAX_STATE_RULES} rules")
+    out = []
+    for i, rule in enumerate(value):
+        at = f"{where}[{i}]"
+        if not isinstance(rule, dict) or set(rule) - set(STATE_RULE_KEYS):
+            raise LayoutError(f"{at}: rule must be an object with known keys")
+        entity = _entity(rule.get("entity"), f"{at}.entity")
+        if entity is None:
+            raise LayoutError(f"{at}.entity: required")
+        if rule.get("when") not in STATE_RULE_WHEN:
+            raise LayoutError(f"{at}.when: must be active or inactive")
+        icon = _icon(rule.get("icon"), f"{at}.icon")
+        color = _color(rule.get("color"), f"{at}.color")
+        if icon is None and color is None:
+            raise LayoutError(f"{at}: needs an icon or a colour")
+        out.append({"entity": entity, "when": rule["when"], "icon": icon, "color": color})
+    return out
+
+
+def _actions(data: Any) -> dict[str, dict[str, Any]]:
+    if not isinstance(data, dict):
+        raise LayoutError("actions must be an object")
+    if len(data) > MAX_ACTIONS:
+        raise LayoutError(f"at most {MAX_ACTIONS} actions")
+    out: dict[str, dict[str, Any]] = {}
+    for aid, action in data.items():
+        where = f"actions[{aid!r}]"
+        if not isinstance(aid, str) or not GROUP_ID.fullmatch(aid):
+            raise LayoutError(f"{where}: invalid action id")
+        if not isinstance(action, dict) or set(action) - set(ACTION_KEYS):
+            raise LayoutError(f"{where}: action row must be an object with known keys")
+        tap = _action(action.get("tap"), f"{where}.tap", tap=True)
+        if tap is None:
+            raise LayoutError(f"{where}.tap: required")
+        out[aid] = {"name": _name(action.get("name"), where), "icon": _icon(action.get("icon"), f"{where}.icon"), "tap": tap}
+    return out
+
+
 def _links(data: Any) -> dict[str, dict[str, Any]]:
     if not isinstance(data, dict):
         raise LayoutError("links must be an object")
@@ -190,7 +296,7 @@ def _links(data: Any) -> dict[str, dict[str, Any]]:
     return out
 
 
-def _items(data: Any, groups: dict[str, Any], links: dict[str, Any]) -> dict[str, dict[str, Any]]:
+def _items(data: Any, groups: dict[str, Any], links: dict[str, Any], actions: dict[str, Any]) -> dict[str, dict[str, Any]]:
     """Per-entry extras (badge entity, show-only-when entity, search words, icon colour); empty entries are dropped.
 
     The icon colour is kept only when set, and only on panels and links: a group has its own colours. The badge colour
@@ -211,6 +317,9 @@ def _items(data: Any, groups: dict[str, Any], links: dict[str, Any]) -> dict[str
         elif key.startswith(LINK_PREFIX):
             if key[len(LINK_PREFIX):] not in links:
                 raise LayoutError(f"{where}: unknown link")
+        elif key.startswith(ACTION_PREFIX):
+            if key[len(ACTION_PREFIX):] not in actions:
+                raise LayoutError(f"{where}: unknown action")
         else:
             _panel(key, where)
         if not isinstance(item, dict) or set(item) - set(ITEM_KEYS):
@@ -233,7 +342,23 @@ def _items(data: Any, groups: dict[str, Any], links: dict[str, Any]) -> dict[str
             if key.startswith(GROUP_PREFIX):
                 raise LayoutError(f"{where}.more_badges: only panels and links take extra badges")
             clean["more_badges"] = more
-        if clean["badge"] or clean["show_when"] or clean["aliases"] or color or more:
+        is_group = key.startswith(GROUP_PREFIX)
+        # v0.8: gestures and state rules are for rows (not groups); a label renames a Home Assistant panel only.
+        extra = {
+            "hold": _action(item.get("hold"), f"{where}.hold"),
+            "double_tap": _action(item.get("double_tap"), f"{where}.double_tap"),
+            "state_rules": _state_rules(item.get("state_rules"), f"{where}.state_rules"),
+            "label": _label(item.get("label"), f"{where}.label"),
+        }
+        for field, value in extra.items():
+            if not value:
+                continue
+            if is_group:
+                raise LayoutError(f"{where}.{field}: not for groups")
+            if field == "label" and key.startswith((LINK_PREFIX, ACTION_PREFIX)):
+                raise LayoutError(f"{where}.label: only Home Assistant panels take a label")
+            clean[field] = value
+        if clean["badge"] or clean["show_when"] or clean["aliases"] or color or more or any(extra.values()):
             out[key] = clean
     return out
 
@@ -262,6 +387,7 @@ def validate_layout(data: Any) -> dict[str, Any]:
         raise LayoutError(f"at most {MAX_PINNED} pinned panels")
     settings = validate_settings(data.get("settings"))
     links = _links(data.get("links", {}))
+    actions = _actions(data.get("actions", {}))
 
     seen_panels: set[str] = set()
     seen_groups: set[str] = set()
@@ -271,6 +397,10 @@ def validate_layout(data: Any) -> dict[str, Any]:
         if isinstance(value, str) and value.startswith(LINK_PREFIX):
             if value[len(LINK_PREFIX):] not in links:
                 raise LayoutError(f"{where}: unknown link {value!r}")
+            entry = value
+        elif isinstance(value, str) and value.startswith(ACTION_PREFIX):
+            if value[len(ACTION_PREFIX):] not in actions:
+                raise LayoutError(f"{where}: unknown action {value!r}")
             entry = value
         else:
             entry = _panel(value, where)
@@ -314,13 +444,16 @@ def validate_layout(data: Any) -> dict[str, Any]:
         for j, value in enumerate(panels):
             clean_panels.append(member(value, f"{where}.panels[{j}]"))
             total += 1
+        tabbed = _flag(group.get("tabbed", False), f"{where}.tabbed")
+        if tabbed and any(p.startswith(ACTION_PREFIX) for p in clean_panels):
+            raise LayoutError(f"{where}: an action row cannot be a tab")
         clean_groups[gid] = {
             "name": _name(group.get("name"), where),
             "icon": icon,
             "color": _color(group.get("color"), f"{where}.color"),
             "icon_color": _color(group.get("icon_color"), f"{where}.icon_color"),
             "start_open": _flag(group.get("start_open", False), f"{where}.start_open"),
-            "tabbed": _flag(group.get("tabbed", False), f"{where}.tabbed"),
+            "tabbed": tabbed,
             "panels": clean_panels,
         }
 
@@ -334,8 +467,11 @@ def validate_layout(data: Any) -> dict[str, Any]:
     for lid in links:
         if f"{LINK_PREFIX}{lid}" not in seen_panels:
             raise LayoutError(f"links[{lid!r}]: link is not placed in the layout")
-    items = _items(data.get("items", {}), clean_groups, links)
-    return {
+    for aid in actions:
+        if f"{ACTION_PREFIX}{aid}" not in seen_panels:
+            raise LayoutError(f"actions[{aid!r}]: action is not placed in the layout")
+    items = _items(data.get("items", {}), clean_groups, links, actions)
+    out = {
         "version": LAYOUT_VERSION,
         "order": clean_order,
         "groups": clean_groups,
@@ -344,6 +480,10 @@ def validate_layout(data: Any) -> dict[str, Any]:
         "links": links,
         "items": items,
     }
+    # v0.8: only when there are action rows, so a v0.7 layout reads back unchanged.
+    if actions:
+        out["actions"] = actions
+    return out
 
 
 def validate_collapsed(data: Any) -> list[str]:

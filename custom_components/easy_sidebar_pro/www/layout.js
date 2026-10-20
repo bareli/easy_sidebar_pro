@@ -12,15 +12,29 @@
 //                    v0.6 icon colour, panels and links only, stored only when set).
 //                   v0.7: `badge_color` (colour of the badge entity's badge, only with one) and `more_badges: [{ entity, color }]`
 //                    (up to MAX_MORE_BADGES, panels and links only), drawn side by side after the first.
+// Actions (v0.8):   `actions: { id: { name, icon, tap } }`; an action row is placed like a link, with path "a:<id>"; a tap runs
+//                   `tap` ({ type: toggle | more-info | call-service, entity?, service?, data? }) and never navigates. Not allowed
+//                   in a tabbed group. `items[key]` also takes `hold` / `double_tap` (an action, or navigate with `path`),
+//                   `state_rules` (up to MAX_STATE_RULES `{ entity, when: active | inactive, icon?, color? }`: the first matching
+//                   rule changes the row's icon and / or icon colour; rows, not groups) and `label` (a panel's own name).
 
 export const GROUP_PREFIX = "g:";
 export const LINK_PREFIX = "l:";
+export const ACTION_PREFIX = "a:";
 export const MAX_LINKS = 50;
+export const MAX_ACTIONS = 50;
+export const MAX_ACTION_DATA = 1000;
+export const MAX_STATE_RULES = 3;
 export const MAX_URL = 2000;
 export const MAX_ALIASES = 100;
 // Same lists as const.py LINK_KEYS / ITEM_KEYS.
 export const LINK_KEYS = ["name", "icon", "url", "new_tab"];
-export const ITEM_KEYS = ["badge", "show_when", "aliases", "color", "badge_color", "more_badges"];
+export const ITEM_KEYS = ["badge", "show_when", "aliases", "color", "badge_color", "more_badges", "hold", "double_tap", "state_rules", "label"];
+export const ACTION_KEYS = ["name", "icon", "tap"];
+export const ACTION_TYPES = ["toggle", "more-info", "call-service", "navigate"];
+export const TAP_TYPES = ["toggle", "more-info", "call-service"];
+export const STATE_RULE_KEYS = ["entity", "when", "icon", "color"];
+export const STATE_RULE_WHEN = ["active", "inactive"];
 export const MAX_MORE_BADGES = 3;
 export const LAYOUT_VERSION = 1;
 export const MAX_NAME = 50;
@@ -49,8 +63,8 @@ const newGroup = (id, name, children) => ({ type: "group", id, name, icon: null,
  * the pins node at the end, which exists when something is pinned or `withPins` asks for it (editor).
  */
 export function buildTree(layout, paths, withPins = false) {
-  // Links exist wherever the layout defines them; one not placed yet goes to the end like a new panel.
-  paths = [...paths, ...linkPaths(layout).filter((p) => !paths.includes(p))];
+  // Links and action rows exist wherever the layout defines them; one not placed yet goes to the end like a new panel.
+  paths = [...paths, ...linkPaths(layout).filter((p) => !paths.includes(p)), ...actionPaths(layout).filter((p) => !paths.includes(p))];
   const known = new Set(paths);
   const placed = new Set();
   const tree = [];
@@ -113,6 +127,11 @@ const ID_RE = /^[a-z0-9]{1,16}$/;
 export const isLink = (path) => typeof path === "string" && path.startsWith(LINK_PREFIX);
 export const linkPath = (id) => `${LINK_PREFIX}${id}`;
 export const linkId = (path) => (isLink(path) ? path.slice(LINK_PREFIX.length) : null);
+export const isAction = (path) => typeof path === "string" && path.startsWith(ACTION_PREFIX);
+export const actionPath = (id) => `${ACTION_PREFIX}${id}`;
+export const actionId = (path) => (isAction(path) ? path.slice(ACTION_PREFIX.length) : null);
+/** "a:<id>" of every action row a layout defines. */
+export const actionPaths = (layout) => Object.keys(layout?.actions ?? {}).filter((id) => ID_RE.test(id)).map(actionPath);
 /** "l:<id>" of every link a layout defines. */
 export const linkPaths = (layout) => Object.keys(layout?.links ?? {}).filter((id) => ID_RE.test(id)).map(linkPath);
 
@@ -214,6 +233,78 @@ export function badgeSpecs(item) {
   return out.concat(cleanMoreBadges(item?.more_badges));
 }
 
+const SERVICE_RE = /^[a-z0-9_]{1,64}\.[a-z0-9_]{1,64}$/;
+
+/** Service data: a plain JSON object of at most MAX_ACTION_DATA characters. null = none (empty), false = refused. */
+function cleanData(value) {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "object" || Array.isArray(value)) return false;
+  let text;
+  try {
+    text = JSON.stringify(value);
+  } catch {
+    return false;
+  }
+  if (cpLength(text) > MAX_ACTION_DATA) return false;
+  return text === "{}" ? null : JSON.parse(text);
+}
+
+/**
+ * What a tap, hold or double tap does, as stored, or null (nothing / unusable). `tap`: an action row's tap, which cannot
+ * navigate. Fields that do not belong to the type are dropped, as the server does.
+ */
+export function cleanAction(value, tap = false) {
+  if (!value || typeof value !== "object") return null;
+  const type = value.type;
+  if (!(tap ? TAP_TYPES : ACTION_TYPES).includes(type)) return null;
+  const entity = validEntity(value.entity) ? value.entity : null;
+  if (type === "toggle" || type === "more-info") return entity ? { type, entity } : null;
+  if (type === "call-service") {
+    if (typeof value.service !== "string" || !SERVICE_RE.test(value.service)) return null;
+    const data = cleanData(value.data);
+    if (data === false) return null;
+    const out = { type, service: value.service };
+    if (entity) out.entity = entity;
+    if (data) out.data = data;
+    return out;
+  }
+  return typeof value.path === "string" && URL_INTERNAL.test(value.path) && validUrl(value.path) ? { type, path: value.path } : null;
+}
+
+/** An action row as stored, or null when it cannot be saved (no name or no usable tap). */
+export function cleanActionRow(row) {
+  const name = cleanName(row?.name);
+  const tap = cleanAction(row?.tap, true);
+  if (!name || !tap) return null;
+  return { name, icon: validIcon(row?.icon) ? row.icon : null, tap };
+}
+
+/** Up to MAX_STATE_RULES rules with a valid entity, `when` and an icon and / or a colour. */
+export function cleanStateRules(value) {
+  if (!Array.isArray(value)) return [];
+  const out = [];
+  for (const r of value) {
+    if (!validEntity(r?.entity) || !STATE_RULE_WHEN.includes(r.when)) continue;
+    const icon = validIcon(r.icon) ? r.icon : null;
+    const color = r.color != null && validColor(r.color) ? r.color : null;
+    if (icon || color) out.push({ entity: r.entity, when: r.when, icon, color });
+    if (out.length === MAX_STATE_RULES) break;
+  }
+  return out;
+}
+
+/** A panel's own name, or null. */
+export const cleanLabel = (value) => cleanName(value) || null;
+
+/**
+ * The first state rule that matches now (`active(entityId)`), as `{ icon, color }` (either may be null), or null.
+ * Rules look at the same "active" meaning as badges and show-only-when conditions.
+ */
+export function ruleLook(item, active) {
+  for (const r of cleanStateRules(item?.state_rules)) if (active(r.entity) === (r.when === "active")) return { icon: r.icon, color: r.color };
+  return null;
+}
+
 /** An entry's extras with defaults, or null when it has none. A colour is kept only when set and not on a group key. */
 export function cleanItem(item, key = "") {
   const out = {
@@ -227,7 +318,28 @@ export function cleanItem(item, key = "") {
   if (out.badge && badgeColor !== null && validColor(badgeColor)) out.badge_color = badgeColor;
   const more = key.startsWith(GROUP_PREFIX) ? [] : cleanMoreBadges(item?.more_badges);
   if (more.length) out.more_badges = more;
-  return out.badge || out.show_when || out.aliases || out.color || more.length ? out : null;
+  // v0.8: gestures and state rules belong to rows; a label to Home Assistant's own panels.
+  let extra = false;
+  if (!key.startsWith(GROUP_PREFIX)) {
+    for (const field of ["hold", "double_tap"]) {
+      const action = cleanAction(item?.[field]);
+      if (action) {
+        out[field] = action;
+        extra = true;
+      }
+    }
+    const rules = cleanStateRules(item?.state_rules);
+    if (rules.length) {
+      out.state_rules = rules;
+      extra = true;
+    }
+    const label = key.startsWith(LINK_PREFIX) || key.startsWith(ACTION_PREFIX) ? null : cleanLabel(item?.label);
+    if (label) {
+      out.label = label;
+      extra = true;
+    }
+  }
+  return out.badge || out.show_when || out.aliases || out.color || more.length || extra ? out : null;
 }
 
 /** A link as stored, or null when it cannot be saved (no name or no valid address). */
@@ -300,6 +412,7 @@ export function watchedEntities(layout) {
   for (const item of Object.values(layout?.items ?? {})) {
     for (const b of badgeSpecs(item)) out.add(b.entity);
     if (validEntity(item?.show_when)) out.add(item.show_when);
+    for (const r of cleanStateRules(item?.state_rules)) out.add(r.entity);
   }
   return [...out];
 }
@@ -312,9 +425,18 @@ export function toLayout(tree, settings, meta = {}) {
   const groups = {};
   let grid = [];
   const links = {};
+  const actions = {};
   const defined = meta.links ?? {};
-  // A link is saved when it is placed and complete; anything else is left out rather than refused.
+  const definedActions = meta.actions ?? {};
+  // A link or an action row is saved when it is placed and complete; anything else is left out rather than refused.
   const valid = (path) => {
+    if (isAction(path)) {
+      const id = actionId(path);
+      if (!ID_RE.test(id) || !definedActions[id] || actions[id]) return false;
+      const row = cleanActionRow(definedActions[id]);
+      if (row) actions[id] = row;
+      return !!row;
+    }
     if (!isLink(path)) return validPanel(path);
     const id = linkId(path);
     if (!ID_RE.test(id) || !defined[id] || links[id]) return false;
@@ -327,15 +449,21 @@ export function toLayout(tree, settings, meta = {}) {
     if (isPins(n)) grid = paths(n.children);
     else if (n.type === "group") {
       order.push(groupKey(n.id));
+      const members = paths(n.children);
+      // An action row cannot be a tab: in a tabbed group it would never be reachable, so it takes its place after the group.
+      const tabbed = n.tabbed === true;
+      const kept = tabbed ? members.filter((p) => !isAction(p)) : members;
+      const moved = tabbed ? members.filter(isAction) : [];
       groups[n.id] = {
         name: n.name,
         icon: n.icon ?? null,
         color: n.color ?? null,
         icon_color: n.icon_color ?? null,
         start_open: n.start_open === true,
-        tabbed: n.tabbed === true,
-        panels: paths(n.children),
+        tabbed,
+        panels: kept,
       };
+      order.push(...moved);
     } else if (valid(n.path)) {
       order.push(n.path);
     }
@@ -343,15 +471,39 @@ export function toLayout(tree, settings, meta = {}) {
   // Extras of panels not shown right now (a stopped add-on) are kept, like their places.
   const items = {};
   for (const [key, item] of Object.entries(meta.items ?? {})) {
-    const ok = key.startsWith(GROUP_PREFIX) ? !!groups[key.slice(GROUP_PREFIX.length)] : isLink(key) ? !!links[linkId(key)] : validPanel(key);
+    const ok = key.startsWith(GROUP_PREFIX)
+      ? !!groups[key.slice(GROUP_PREFIX.length)]
+      : isLink(key)
+        ? !!links[linkId(key)]
+        : isAction(key)
+          ? !!actions[actionId(key)]
+          : validPanel(key);
     const clean = ok ? cleanItem(item, key) : null;
     if (clean) items[key] = clean;
   }
-  return { version: LAYOUT_VERSION, order, groups, grid, settings: cleanSettings(settings), links, items };
+  const out = { version: LAYOUT_VERSION, order, groups, grid, settings: cleanSettings(settings), links, items };
+  // Only with action rows, so a v0.7 layout saves as it was.
+  if (Object.keys(actions).length) out.actions = actions;
+  return out;
 }
 
-/** The editor's links and extras from a stored layout: a deep copy (the editor changes them in place). */
-export const metaOf = (layout) => JSON.parse(JSON.stringify({ links: layout?.links ?? {}, items: layout?.items ?? {} }));
+export const MAX_IMPORT_BYTES = 256 * 1024;
+
+/**
+ * Whether parsed JSON can be a layout to import: null when it can be, "version" for a layout of a newer version,
+ * "invalid" for anything else. The server still validates the saved layout; this keeps nonsense out of the editor.
+ */
+export function checkImport(data) {
+  if (!data || typeof data !== "object" || Array.isArray(data)) return "invalid";
+  if (data.version !== LAYOUT_VERSION) return typeof data.version === "number" && data.version > LAYOUT_VERSION ? "version" : "invalid";
+  if (!Array.isArray(data.order) || (data.grid !== undefined && !Array.isArray(data.grid))) return "invalid";
+  for (const field of ["groups", "links", "actions", "items", "settings"])
+    if (data[field] !== undefined && (!data[field] || typeof data[field] !== "object" || Array.isArray(data[field]))) return "invalid";
+  return null;
+}
+
+/** The editor's links, action rows and extras from a stored layout: a deep copy (the editor changes them in place). */
+export const metaOf = (layout) => JSON.parse(JSON.stringify({ links: layout?.links ?? {}, actions: layout?.actions ?? {}, items: layout?.items ?? {} }));
 
 /** Settings with defaults for anything missing or invalid (the server refuses invalid ones). */
 export function cleanSettings(value) {
@@ -607,6 +759,11 @@ export function move(tree, key, targetKey, zone) {
   const to = locate(next, targetKey);
   if (!node || !to) return tree;
   if (node.type === "group" && zone === "into") return tree;
+  // An action row is no tab: it cannot go into a tabbed group.
+  if (node.type === "panel" && isAction(node.path)) {
+    const dest = zone === "into" ? (to.node.type === "group" ? to.node.id : null) : to.group;
+    if (dest !== null && tree.some((n) => n.type === "group" && n.id === dest && n.tabbed === true)) return tree;
+  }
   // A group never enters the pinned area: dropped on it, it lands right above it.
   if (node.type === "group" && (targetKey === PINS_KEY || to.group === PINS_ID)) {
     targetKey = PINS_KEY;
@@ -658,6 +815,12 @@ export function addGroup(tree, id, name) {
 
 /** A new link row at the top of the list. */
 export const addLink = (tree, id) => [{ type: "panel", path: linkPath(id) }, ...clone(tree)];
+
+/** A new action row at the top of the list. */
+export const addAction = (tree, id) => [{ type: "panel", path: actionPath(id) }, ...clone(tree)];
+
+/** Whether a tabbed group holds an action row, or `key` is one and `dest` (a group id) is tabbed: not allowed. */
+export const tabbedHasActions = (tree, id) => tree.some((n) => n.type === "group" && n.id === id && n.children.some((c) => isAction(c.path)));
 
 /** Remove a panel or link row from wherever it is. */
 export function removeEntry(tree, key) {

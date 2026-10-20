@@ -167,9 +167,9 @@ test("dashboardViews: titled, top-level views of dashboards with several views, 
 
 test("key lists and limits match const.py", () => {
   assert.match(PY, /LINK_KEYS = \("name", "icon", "url", "new_tab"\)/);
-  assert.match(PY, /ITEM_KEYS = \("badge", "show_when", "aliases", "color", "badge_color", "more_badges"\)/);
+  assert.match(PY, /ITEM_KEYS = \("badge", "show_when", "aliases", "color", "badge_color", "more_badges", "hold", "double_tap", "state_rules", "label"\)/);
   assert.deepEqual(L.LINK_KEYS, ["name", "icon", "url", "new_tab"]);
-  assert.deepEqual(L.ITEM_KEYS, ["badge", "show_when", "aliases", "color", "badge_color", "more_badges"]);
+  assert.deepEqual(L.ITEM_KEYS, ["badge", "show_when", "aliases", "color", "badge_color", "more_badges", "hold", "double_tap", "state_rules", "label"]);
   assert.match(PY, new RegExp(`MAX_LINKS = ${L.MAX_LINKS}\\b`));
   assert.match(PY, new RegExp(`MAX_URL = ${L.MAX_URL}\\b`));
   assert.match(PY, new RegExp(`MAX_ALIASES = ${L.MAX_ALIASES}\\b`));

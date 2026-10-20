@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.8.0 (2026-10-20)
+
+- **Action rows** (**Add action** in the editor): an item that does something instead of opening a page: toggle an entity, show an entity's details, or call any service (with optional JSON data). It can be grouped, pinned, have badges, icon colour and a show-only-when rule like any item, but it cannot be a tab. It runs as you; Home Assistant's permissions apply and a failure shows as Home Assistant's own message.
+- **Hold and double tap** on any item (⋮ options): a hold (press and keep, or Shift+Enter on the keyboard) and a double tap (or Alt+Enter) can toggle an entity, show details, call a service or open a page. A row with a double tap opens a quarter of a second after a single tap. Not active while you edit.
+- **Icon and colour by state** (⋮ options, up to three rules per item): while an entity is active or inactive, the item's icon and/or icon colour change, for example a door icon turning red while the door is open. The first matching rule wins.
+- **Rename panels** (⋮ options on Home Assistant's own panels): a name shown in the sidebar, the editor and the tabs; the search finds the new and the original name.
+- **Export and import** the layout as a JSON file (editor footer). An import loads into the editor like unsaved changes; **Done** saves it (the server checks it again). Files over 256 KB are refused.
+- A link to a Home Assistant page is already highlighted while that page or a page under it is open, so there is no extra option for it.
+
 ## v0.7.0 (2026-10-20)
 
 - **Badge colour** (⋮ on a row, **More** on a group): the same theme colours and custom `#rrggbb` as other colours, for the badge of that item only, for example a red badge for overdue tasks. The badge stays readable: the colour is darkened under white text.

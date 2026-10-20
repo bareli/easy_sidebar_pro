@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from custom_components.easy_sidebar_pro.const import DOMAIN, ITEM_KEYS, LINK_KEYS, MAX_LINKS
+from custom_components.easy_sidebar_pro.const import DOMAIN, LINK_KEYS, MAX_LINKS
 from custom_components.easy_sidebar_pro.layout import LayoutError, validate_layout
 
 LINK = {"name": "Automations", "icon": "mdi:robot", "url": "/config/automation", "new_tab": False}
@@ -31,7 +31,7 @@ def test_full_layout_with_links_and_items():
     assert list(out["links"]["auto"]) == list(LINK_KEYS)
     assert out["links"]["pin"] == {"name": "NAS", "icon": None, "url": "http://192.168.1.251:5000", "new_tab": False}
     assert out["items"]["g:home"] == {"badge": "counter.open_windows", "show_when": None, "aliases": "house home"}
-    assert list(out["items"]["map"]) == [k for k in ITEM_KEYS if k not in ("color", "badge_color", "more_badges")]  # these only when set
+    assert list(out["items"]["map"]) == ["badge", "show_when", "aliases"]  # the other keys only when set
     # a panel the layout does not place (shown at the end) may still have extras
     assert out["items"]["energy"]["badge"] == "sensor.power"
     assert validate_layout(out) == out
