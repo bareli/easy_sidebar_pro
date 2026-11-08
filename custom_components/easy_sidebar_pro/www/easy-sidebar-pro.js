@@ -2858,6 +2858,27 @@ ha-icon + .badge.esp-dot, ha-svg-icon + .badge.esp-dot { width: 8px; height: 8px
 let sidebarSheet = null;
 let navSheet = null;
 
+// Safari 16.4: ShadowRoot.adoptedStyleSheets is an ObservableArray whose includes() gives false
+// negatives for sheets appended later, so a plain "append if missing" check re-appends our sheet
+// on every update (67 -> 149 entries observed) and along the way loses the element's own sheets,
+// breaking its layout (GH-67). Rebuild the list by index instead of trusting includes()/indexOf().
+function espAdopt(el, sheet) {
+  const root = el.shadowRoot;
+  if (!root) return;
+  const cur = root.adoptedStyleSheets,
+    list = [];
+  for (let i = 0; i < cur.length; i++) list.push(cur[i]);
+  const own = [];
+  for (const s of el.constructor?.elementStyles ?? []) {
+    const sh = s instanceof CSSStyleSheet ? s : s?.styleSheet;
+    if (sh) own.push(sh);
+  }
+  const want = own.slice();
+  for (const s of list) if (s !== sheet && !own.includes(s) && !want.includes(s)) want.push(s);
+  want.push(sheet);
+  if (want.length !== list.length || want.some((s, i) => s !== list[i])) root.adoptedStyleSheets = want;
+}
+
 class Controller {
   constructor(sb) {
     this.sb = sb;
@@ -3436,7 +3457,7 @@ class Controller {
       sidebarSheet = new CSSStyleSheet();
       sidebarSheet.replaceSync(SIDEBAR_CSS);
     }
-    if (!root.adoptedStyleSheets.includes(sidebarSheet)) root.adoptedStyleSheets = [...root.adoptedStyleSheets, sidebarSheet];
+    espAdopt(this.sb, sidebarSheet);
     const divider = this.editing ? "line" : this.settings.divider;
     if (this.sb.getAttribute("data-esp-divider") !== divider) this.sb.setAttribute("data-esp-divider", divider);
     this.installGestures(root);
@@ -3492,7 +3513,7 @@ class Controller {
         // Pinned rows flow into a grid: the fixed list wraps rows while it holds any.
         navSheet.replaceSync(":host([data-esp-editing]) .base { overflow: visible; } :host([data-esp-pins]) .base { flex-flow: row wrap; }");
       }
-      if (!nav.shadowRoot.adoptedStyleSheets.includes(navSheet)) nav.shadowRoot.adoptedStyleSheets = [...nav.shadowRoot.adoptedStyleSheets, navSheet];
+      espAdopt(nav, navSheet);
       if (nav.classList.contains("before-spacer") && nav.hasAttribute("data-esp-editing") !== this.editing)
         nav.toggleAttribute("data-esp-editing", this.editing);
     }
@@ -4508,6 +4529,10 @@ function patch(cls) {
   p.updated = function (changed) {
     origUpdated?.call(this, changed);
     if (this.hass) controllerFor(this).afterUpdate();
+    // WebKit paints the children of the display:contents main-navigation slot in stale order
+    // after rows are inserted between them; as a block they are laid out in DOM order (GH-67).
+    const navSlot = this.shadowRoot?.querySelector("ha-list-nav.before-spacer > slot");
+    if (navSlot && navSlot.style.display !== "block") navSlot.style.display = "block";
   };
   // These two wrappers do NOT run in the browser: a custom element's lifecycle callbacks are read once, at
   // define(), and ha-sidebar is defined before this patch (PERF-006). They stay only for callers that invoke

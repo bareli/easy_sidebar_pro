@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.8.1 (2026-11-08)
+
+- **Safari / iOS fix**: rows and groups painted out of order on load, and expanded groups appearing far from their header, in Safari and the Home Assistant iOS app (WebKit). On older WebKit (Safari 16.4, iPadOS 16.7) the header also wrapped onto two lines and badges doubled. Fixed by forcing layout on a `display: contents` slot and rebuilding the sidebar's stylesheet list instead of relying on a WebKit-broken `includes()` check (GH-67, reported and diagnosed by @robertsze).
+
 ## v0.8.0 (2026-10-20)
 
 - **Action rows** (**Add action** in the editor): an item that does something instead of opening a page: toggle an entity, show an entity's details, or call any service (with optional JSON data). It can be grouped, pinned, have badges, icon colour and a show-only-when rule like any item, but it cannot be a tab. It runs as you; Home Assistant's permissions apply and a failure shows as Home Assistant's own message.
