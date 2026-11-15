@@ -195,7 +195,7 @@ test("#49 the pencil and collapse-all buttons write only on change", () => {
   assert.ok(!/\b(all|edit)\.hidden =/.test(block));
   assert.ok(!/edit\.setAttribute\(/.test(block));
   assert.match(block, /setFlag\(all, "hidden", /);
-  assert.match(block, /setFlag\(edit, "hidden", !!this\.editing\);/);
+  assert.match(block, /setFlag\(edit, "hidden", !!this\.editing \|\| !!this\.data\?\.edit_locked\);/);
   assert.match(block, /setAttr\(edit, "aria-label", editLabel\);\n\s+if \(edit\.title !== editLabel\) edit\.title = editLabel;/);
 });
 

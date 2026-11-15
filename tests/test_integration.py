@@ -52,7 +52,7 @@ async def test_subscribe_save_collapse_reset(hass: HomeAssistant, entry, hass_ws
     await ws.send_json_auto_id({"type": f"{DOMAIN}/subscribe"})
     assert (await ws.receive_json())["success"]
     first = (await ws.receive_json())["event"]
-    assert first == {"layout": None, "default": None, "own": False, "collapsed": [], "is_admin": True}
+    assert first == {"layout": None, "default": None, "own": False, "collapsed": [], "is_admin": True, "edit_locked": False}
 
     await ws.send_json_auto_id({"type": f"{DOMAIN}/save", "layout": LAYOUT})
     msgs = [await ws.receive_json(), await ws.receive_json()]
@@ -97,7 +97,7 @@ async def test_default_layout_admin_only_and_shared(hass: HomeAssistant, entry, 
     await admin.send_json_auto_id({"type": f"{DOMAIN}/default/set", "layout": LAYOUT})
     assert (await admin.receive_json())["success"]
     event = (await user.receive_json())["event"]
-    assert event == {"layout": N_LAYOUT, "default": N_LAYOUT, "own": False, "collapsed": [], "is_admin": False}
+    assert event == {"layout": N_LAYOUT, "default": N_LAYOUT, "own": False, "collapsed": [], "is_admin": False, "edit_locked": False}
 
     # The user's own layout wins over the default; the admin's save does not reach the user.
     await user.send_json_auto_id({"type": f"{DOMAIN}/save", "layout": OTHER})
@@ -146,7 +146,7 @@ async def test_corrupt_storage_is_ignored(hass: HomeAssistant, hass_storage, has
     assert await hass.config_entries.async_setup(entry.entry_id)
     store = hass.data[DATA_STORE]
     assert store.default is None
-    assert store.users == {"u1": {"layout": None, "collapsed": []}}
+    assert store.users == {"u1": {"layout": None, "collapsed": [], "edit_locked": False}}
     await flush_store(store._store)
 
 
@@ -157,3 +157,49 @@ async def test_not_loaded(hass: HomeAssistant, hass_ws_client) -> None:
     ws = await hass_ws_client(hass)
     await ws.send_json_auto_id({"type": f"{DOMAIN}/subscribe"})
     assert (await ws.receive_json())["error"]["code"] == "not_loaded"
+
+
+async def test_lock_edit_admin_only_and_blocks_self(
+    hass: HomeAssistant, entry, hass_ws_client, hass_admin_user, hass_read_only_user, hass_read_only_access_token
+) -> None:
+    admin = await hass_ws_client(hass)
+    user = await hass_ws_client(hass, hass_read_only_access_token)
+
+    # A non-admin cannot lock anyone, or list who is locked.
+    await user.send_json_auto_id({"type": f"{DOMAIN}/lock_edit", "user_id": hass_admin_user.id, "locked": True})
+    assert (await user.receive_json())["error"]["code"] == "unauthorized"
+    await user.send_json_auto_id({"type": f"{DOMAIN}/locked_users"})
+    assert (await user.receive_json())["error"]["code"] == "unauthorized"
+
+    # An admin cannot lock themselves (avoids a self-lockout).
+    await admin.send_json_auto_id({"type": f"{DOMAIN}/lock_edit", "user_id": hass_admin_user.id, "locked": True})
+    assert (await admin.receive_json())["error"]["code"] == "cannot_lock_self"
+
+    # Locking another user shows up on their own live subscription right away.
+    await user.send_json_auto_id({"type": f"{DOMAIN}/subscribe"})
+    assert (await user.receive_json())["success"]
+    assert (await user.receive_json())["event"]["edit_locked"] is False
+
+    await admin.send_json_auto_id({"type": f"{DOMAIN}/lock_edit", "user_id": hass_read_only_user.id, "locked": True})
+    assert (await admin.receive_json())["success"]
+    assert (await user.receive_json())["event"]["edit_locked"] is True
+
+    await admin.send_json_auto_id({"type": f"{DOMAIN}/locked_users"})
+    assert (await admin.receive_json())["result"] == {"locked": [hass_read_only_user.id]}
+
+    # A locked user's own save is rejected server side, not only hidden in the UI.
+    await user.send_json_auto_id({"type": f"{DOMAIN}/save", "layout": LAYOUT})
+    assert (await user.receive_json())["error"]["code"] == "edit_locked"
+
+    # Unlocking clears it, and the flag survives a reload.
+    await admin.send_json_auto_id({"type": f"{DOMAIN}/lock_edit", "user_id": hass_read_only_user.id, "locked": False})
+    assert (await admin.receive_json())["success"]
+    assert (await user.receive_json())["event"]["edit_locked"] is False
+
+    await admin.send_json_auto_id({"type": f"{DOMAIN}/lock_edit", "user_id": hass_read_only_user.id, "locked": True})
+    assert (await admin.receive_json())["success"]
+    assert (await user.receive_json())["event"]["edit_locked"] is True
+
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+    assert hass.data[DATA_STORE].locked_users() == [hass_read_only_user.id]

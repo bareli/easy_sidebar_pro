@@ -182,6 +182,8 @@ const STRINGS = {
     clearDefaultAsk: "Users who have not customised their sidebar go back to Home Assistant's order.",
     clearDefaultOk: "Remove",
     clearDefaultDone: "The default layout was removed.",
+    lockEdit: "Lock editing for a user",
+    lockEditHelp: "They keep using the sidebar; they just cannot open the editor.",
     onDefault: "You are using the default layout.",
     forkNote: "Saving makes this layout yours: it will no longer follow the default layout. You can go back to it later. Press Done again to save.",
     saveFailed: "Could not save. Try again.",
@@ -377,6 +379,8 @@ const STRINGS = {
     clearDefaultAsk: "משתמשים שלא שינו את סרגל הצד שלהם יחזרו לסדר של Home Assistant.",
     clearDefaultOk: "הסרה",
     clearDefaultDone: "פריסת ברירת המחדל הוסרה.",
+    lockEdit: "חסימת עריכה למשתמש",
+    lockEditHelp: "המשתמש ימשיך להשתמש בסרגל הצד; הוא לא יוכל לפתוח את העורך.",
     onDefault: "זו פריסת ברירת המחדל.",
     forkNote: "שמירה תהפוך את הפריסה לשלכם, והיא לא תעקוב יותר אחרי פריסת ברירת המחדל. אפשר לחזור אליה בהמשך. לחצו שוב על סיום כדי לשמור.",
     saveFailed: "לא ניתן לשמור. נסו שוב.",
@@ -1149,7 +1153,7 @@ class EspEditor extends HTMLElement {
 
   /**
    * opts: { tree, settings, hiddenSet:Set, info:Map(path→{title,icon,iconPath}), lockedVisible:Set, lang, isAdmin, own,
-   * hasDefault, sameAsDefault, look:(color, iconColor)→{line, icon}, actions }
+   * hasDefault, sameAsDefault, lockUsers:[{id,name,locked}]|null, look:(color, iconColor)→{line, icon}, actions }
    */
   open(opts) {
     Object.assign(this, opts);
@@ -1440,7 +1444,7 @@ class EspEditor extends HTMLElement {
           action("plain", t(lang, "resetPlain"), t(lang, "resetPlainAsk"), t(lang, "resetPlainOk"), () => this.actions.resetPlain(), true),
         ),
       );
-    if (this.isAdmin)
+    if (this.isAdmin) {
       footer.append(
         h(
           "div",
@@ -1452,6 +1456,28 @@ class EspEditor extends HTMLElement {
             : null,
         ),
       );
+      if (this.lockUsers?.length)
+        footer.append(
+          h(
+            "div",
+            { class: "footer-section", role: "group", "aria-labelledby": "esp-lockedit" },
+            h("div", { class: "footer-heading", id: "esp-lockedit" }, t(lang, "lockEdit")),
+            h("div", { class: "note" }, t(lang, "lockEditHelp")),
+            ...this.lockUsers.map((u) =>
+              h(
+                "label",
+                { class: "check" },
+                h("input", {
+                  type: "checkbox",
+                  ".checked": u.locked,
+                  onchange: (e) => this.actions.lockEdit(u.id, e.target.checked),
+                }),
+                h("span", {}, u.name),
+              ),
+            ),
+          ),
+        );
+    }
 
     footer.append(
       h(
@@ -3029,6 +3055,7 @@ class Controller {
       this.sessionInitial = false;
     }
     this.seenData = true;
+    if (this.editing && !data.is_admin && data.edit_locked) return this.stopEdit();
     if (this.editor && this.editing)
       this.editor.set({ isAdmin: data.is_admin, own: data.own, hasDefault: !!data.default, sameAsDefault: this.sameAsDefault() });
     this.refresh();
@@ -3554,7 +3581,7 @@ class Controller {
           all.replaceChildren(svg(open ? ICONS.collapseAll : ICONS.expandAll));
         }
       }
-      setFlag(edit, "hidden", !!this.editing);
+      setFlag(edit, "hidden", !!this.editing || !!this.data?.edit_locked);
       const editLabel = t(this.lang, "edit");
       setAttr(edit, "aria-label", editLabel);
       if (edit.title !== editLabel) edit.title = editLabel;
@@ -3944,7 +3971,7 @@ class Controller {
   }
 
   startEdit() {
-    if (!this.data) return;
+    if (!this.data || (!this.data.is_admin && this.data.edit_locked)) return;
     const { paths, hidden, defaultInvisible, info, locked } = this.allPanels();
     const tree = L.buildTree(this.data.layout, paths, gridSupported);
     const settings = L.cleanSettings(this.data.layout?.settings);
@@ -3968,9 +3995,28 @@ class Controller {
       own: this.data.own,
       hasDefault: !!this.data.default,
       sameAsDefault: this.sameAsDefault(),
+      lockUsers: null,
       actions: this.actions(),
     });
+    if (this.data.is_admin) this.loadLockUsers();
     this.refresh();
+  }
+
+  /** Admin only: every other real user, with whether their editing is locked, for the editor's footer. */
+  async loadLockUsers() {
+    try {
+      const [users, { locked }] = await Promise.all([
+        this.hass.callWS({ type: "config/auth/list" }),
+        this.hass.callWS({ type: `${DOMAIN}/locked_users` }),
+      ]);
+      const lockedSet = new Set(locked);
+      const list = users
+        .filter((u) => !u.system_generated && u.id !== this.hass.user.id)
+        .map((u) => ({ id: u.id, name: u.name, locked: lockedSet.has(u.id) }));
+      this.editor?.set({ lockUsers: list });
+    } catch {
+      this.editor?.set({ lockUsers: [] });
+    }
   }
 
   stopEdit() {
@@ -4373,6 +4419,15 @@ class Controller {
           e.set({ confirming: null, error: "", status: t(lang(), "clearDefaultDone") }, "done");
         } catch (err) {
           e.set({ confirming: null, ...this.failure(err) });
+        }
+      },
+      lockEdit: async (userId, locked) => {
+        const e = ed();
+        try {
+          await this.hass.callWS({ type: `${DOMAIN}/lock_edit`, user_id: userId, locked });
+          e.set({ lockUsers: e.lockUsers.map((u) => (u.id === userId ? { ...u, locked } : u)) });
+        } catch (err) {
+          e.set({ ...this.failure(err) });
         }
       },
     };

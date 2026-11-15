@@ -17,7 +17,7 @@ DATA_STORE = f"{DOMAIN}_store"
 
 @callback
 def async_register(hass: HomeAssistant) -> None:
-    for handler in (ws_subscribe, ws_save, ws_collapsed, ws_reset, ws_default_set):
+    for handler in (ws_subscribe, ws_save, ws_collapsed, ws_reset, ws_default_set, ws_lock_edit, ws_locked_users):
         websocket_api.async_register_command(hass, handler)
 
 
@@ -53,6 +53,9 @@ def ws_subscribe(hass: HomeAssistant, connection: websocket_api.ActiveConnection
 @callback
 def ws_save(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
     if (store := _store(hass, connection, msg)) is None:
+        return
+    if not connection.user.is_admin and store.is_edit_locked(connection.user.id):
+        connection.send_error(msg["id"], "edit_locked", "Editing is locked for this user")
         return
     try:
         layout = validate_layout(msg["layout"])
@@ -103,3 +106,27 @@ def ws_default_set(hass: HomeAssistant, connection: websocket_api.ActiveConnecti
             return
     store.set_default(layout)
     connection.send_result(msg["id"])
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): f"{DOMAIN}/lock_edit", vol.Required("user_id"): str, vol.Required("locked"): bool}
+)
+@websocket_api.require_admin
+@callback
+def ws_lock_edit(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    if (store := _store(hass, connection, msg)) is None:
+        return
+    if msg["user_id"] == connection.user.id:
+        connection.send_error(msg["id"], "cannot_lock_self", "You cannot lock your own editing")
+        return
+    store.set_edit_locked(msg["user_id"], msg["locked"])
+    connection.send_result(msg["id"])
+
+
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/locked_users"})
+@websocket_api.require_admin
+@callback
+def ws_locked_users(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    if (store := _store(hass, connection, msg)) is None:
+        return
+    connection.send_result(msg["id"], {"locked": store.locked_users()})
