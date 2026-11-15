@@ -303,3 +303,24 @@ export / import; action rows for any user.
 ### 10.6 Not done
 - Sub-path highlighting for links (`match_prefix`): already how internal links work (`linkAt`: the path or a page
   under it, longest match), so it was not added as an option.
+
+## 11. v0.9: lock editing per user (GH-68)
+
+Requested by @philpeeps: let an admin stop a specific user from customising their own sidebar, while they keep
+using it (and keep their current layout, if they have one).
+
+- Server: `edit_locked: bool` on a user's store record (default false), set by the admin-only command
+  `easy_sidebar_pro/lock_edit` (`user_id`, `locked`); `easy_sidebar_pro/locked_users` (admin only) lists who is
+  locked, for the editor's own admin section. `edit_locked` is part of every `subscribe` view, so a lock takes
+  effect on the locked user's open tab right away (same dispatcher path as a layout or default change).
+  An admin cannot lock themselves (`cannot_lock_self`): the one admin tester could otherwise lock themselves out
+  with no other admin to undo it. `save` itself also checks the flag server side (`edit_locked` error): the UI
+  gate is not the only thing stopping a locked user, in case they call the websocket command directly.
+- Editor: admin-only "Lock editing for a user" list in the footer (`config/auth/list`, Home Assistant's own
+  command, for the names; excludes system-generated users and the admin's own account), one checkbox per user,
+  applied immediately (no confirmation step, unlike **Set as default** / **Remove the default**: reversible,
+  single-user, no data loss).
+- Sidebar: a locked user's pencil button is hidden rather than disabled (`edit_locked`, `startEdit` also refuses
+  defensively); if an admin locks them while their editor is open, it closes under them on the next `subscribe`
+  event. `collapsed` (fold state) and `reset` (drop back to the default) stay allowed: neither lets a locked user
+  build a custom layout.

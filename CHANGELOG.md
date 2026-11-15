@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.9.0 (2026-11-15)
+
+- **Lock editing for a user** (admin, editor footer): stop a specific user from customising their own sidebar while they keep using it. They keep their current layout (if they have one); they just cannot open the editor. Takes effect on their open tab right away (GH-68, requested by @philpeeps).
+
 ## v0.8.1 (2026-11-08)
 
 - **Safari / iOS fix**: rows and groups painted out of order on load, and expanded groups appearing far from their header, in Safari and the Home Assistant iOS app (WebKit). On older WebKit (Safari 16.4, iPadOS 16.7) the header also wrapped onto two lines and badges doubled. Fixed by forcing layout on a `display: contents` slot and rebuilding the sidebar's stylesheet list instead of relying on a WebKit-broken `includes()` check (GH-67, reported and diagnosed by @robertsze).

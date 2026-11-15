@@ -33,7 +33,11 @@ class LayoutStore:
                 collapsed = validate_collapsed(record.get("collapsed", []))
             except LayoutError:
                 collapsed = []
-            self.users[user_id] = {"layout": _safe_layout(record.get("layout")), "collapsed": collapsed}
+            self.users[user_id] = {
+                "layout": _safe_layout(record.get("layout")),
+                "collapsed": collapsed,
+                "edit_locked": bool(record.get("edit_locked", False)),
+            }
 
     @callback
     def view(self, user_id: str, is_admin: bool) -> dict[str, Any]:
@@ -45,6 +49,7 @@ class LayoutStore:
             "own": own is not None,
             "collapsed": record.get("collapsed", []),
             "is_admin": is_admin,
+            "edit_locked": bool(record.get("edit_locked", False)),
         }
 
     def _record(self, user_id: str) -> dict[str, Any]:
@@ -64,6 +69,19 @@ class LayoutStore:
     def set_default(self, layout: dict[str, Any] | None) -> None:
         self.default = layout
         self._changed(None)
+
+    @callback
+    def is_edit_locked(self, user_id: str) -> bool:
+        return bool(self.users.get(user_id, {}).get("edit_locked"))
+
+    @callback
+    def set_edit_locked(self, user_id: str, locked: bool) -> None:
+        self._record(user_id)["edit_locked"] = locked
+        self._changed(user_id)
+
+    @callback
+    def locked_users(self) -> list[str]:
+        return [user_id for user_id, record in self.users.items() if record.get("edit_locked")]
 
     @callback
     def _changed(self, user_id: str | None) -> None:
